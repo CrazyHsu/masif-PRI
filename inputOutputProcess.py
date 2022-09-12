@@ -1,0 +1,259 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+'''
+File name: inputOutputProcess.py
+Author: CrazyHsu @ crazyhsu9627@gmail.com
+Created on: 2022-09-11 20:46:54
+Last modified: 2022-09-11 20:46:54
+'''
+
+import numpy as np
+import pymesh
+
+from subprocess import Popen, PIPE
+from Bio.PDB import StructureBuilder, PDBParser, Selection, PDBIO
+from Bio.PDB.PDBIO import Select
+from Bio.SeqUtils import IUPACData
+PROTEIN_LETTERS = [x.upper() for x in IUPACData.protein_letters_3to1.keys()]
+
+
+def read_msms(file_root):
+    """
+    read_msms: Read an msms output file that was output by MSMS (MSMS is the program we use to build a surface)
+    Pablo Gainza - LPDI STI EPFL 2019
+    Released under an Apache License 2.0
+    """
+    # read the surface from the msms output. MSMS outputs two files: {file_root}.vert and {file_root}.face
+
+    vertfile = open(file_root + ".vert")
+    meshdata = (vertfile.read().rstrip()).split("\n")
+    vertfile.close()
+
+    # Read number of vertices.
+    count = {}
+    header = meshdata[2].split()
+    count["vertices"] = int(header[0])
+    ## Data Structures
+    vertices = np.zeros((count["vertices"], 3))
+    normalv = np.zeros((count["vertices"], 3))
+    atom_id = [""] * count["vertices"]
+    res_id = [""] * count["vertices"]
+    for i in range(3, len(meshdata)):
+        fields = meshdata[i].split()
+        vi = i - 3
+        vertices[vi][0] = float(fields[0])
+        vertices[vi][1] = float(fields[1])
+        vertices[vi][2] = float(fields[2])
+        normalv[vi][0] = float(fields[3])
+        normalv[vi][1] = float(fields[4])
+        normalv[vi][2] = float(fields[5])
+        atom_id[vi] = fields[7]
+        res_id[vi] = fields[9]
+        count["vertices"] -= 1
+
+    # Read faces.
+    facefile = open(file_root + ".face")
+    meshdata = (facefile.read().rstrip()).split("\n")
+    facefile.close()
+
+    # Read number of vertices.
+    header = meshdata[2].split()
+    count["faces"] = int(header[0])
+    faces = np.zeros((count["faces"], 3), dtype=int)
+    normalf = np.zeros((count["faces"], 3))
+
+    for i in range(3, len(meshdata)):
+        fi = i - 3
+        fields = meshdata[i].split()
+        faces[fi][0] = int(fields[0]) - 1
+        faces[fi][1] = int(fields[1]) - 1
+        faces[fi][2] = int(fields[2]) - 1
+        count["faces"] -= 1
+
+    assert count["vertices"] == 0
+    assert count["faces"] == 0
+
+    return vertices, faces, normalv, res_id
+
+
+# Exclude disordered atoms.
+class NotDisordered(Select):
+    def accept_atom(self, atom):
+        return not atom.is_disordered() or atom.get_altloc() == "A"  or atom.get_altloc() == "1"
+
+
+def find_modified_amino_acids(path):
+    """
+    Contributed by github user jomimc - find modified amino acids in the PDB (e.g. MSE)
+    """
+    res_set = set()
+    for line in open(path, 'r'):
+        if line[:6] == 'SEQRES':
+            for res in line.split()[4:]:
+                res_set.add(res)
+    for res in list(res_set):
+        if res in PROTEIN_LETTERS:
+            res_set.remove(res)
+    return res_set
+
+
+def extractPDB(infilename, outfilename, chain_ids=None):
+    """
+    extractPDB: Extract selected chains from a PDB and save the extracted chains to an output file.
+    Pablo Gainza - LPDI STI EPFL 2019
+    Released under an Apache License 2.0
+    """
+    # extract the chain_ids from infilename and save in outfilename.
+    parser = PDBParser(QUIET=True)
+    struct = parser.get_structure(infilename, infilename)
+    model = Selection.unfold_entities(struct, "M")[0]
+    chains = Selection.unfold_entities(struct, "C")
+    # Select residues to extract and build new structure
+    structBuild = StructureBuilder.StructureBuilder()
+    structBuild.init_structure("output")
+    structBuild.init_seg(" ")
+    structBuild.init_model(0)
+    outputStruct = structBuild.get_structure()
+
+    # Load a list of non-standard amino acid names -- these are
+    # typically listed under HETATM, so they would be typically
+    # ignored by the orginal algorithm
+    modified_amino_acids = find_modified_amino_acids(infilename)
+
+    for chain in model:
+        if (chain_ids == None or chain.get_id() in chain_ids):
+            structBuild.init_chain(chain.get_id())
+            for residue in chain:
+                het = residue.get_id()
+                if het[0] == " ":
+                    outputStruct[0][chain.get_id()].add(residue)
+                elif het[0][-3:] in modified_amino_acids:
+                    outputStruct[0][chain.get_id()].add(residue)
+
+    # Output the selected residues
+    pdbio = PDBIO()
+    pdbio.set_structure(outputStruct)
+    pdbio.save(outfilename, select=NotDisordered())
+
+
+"""
+read_ply: Read a ply file from disk using pymesh and load the attributes used by MaSIF. 
+Pablo Gainza - LPDI STI EPFL 2019
+Released under an Apache License 2.0
+"""
+def read_ply(filename):
+    # Read a ply file from disk using pymesh and load the attributes used by MaSIF.
+    # filename: the input ply file.
+    # returns data as tuple.
+    mesh = pymesh.load_mesh(filename)
+
+    attributes = mesh.get_attribute_names()
+    if "vertex_nx" in attributes:
+        nx = mesh.get_attribute("vertex_nx")
+        ny = mesh.get_attribute("vertex_ny")
+        nz = mesh.get_attribute("vertex_nz")
+
+        normals = np.column_stack((nx, ny, nz))
+    else:
+        normals = None
+    if "vertex_charge" in attributes:
+        charge = mesh.get_attribute("vertex_charge")
+    else:
+        charge = np.array([0.0] * len(mesh.vertices))
+
+    if "vertex_cb" in attributes:
+        vertex_cb = mesh.get_attribute("vertex_cb")
+    else:
+        vertex_cb = np.array([0.0] * len(mesh.vertices))
+
+    if "vertex_hbond" in attributes:
+        vertex_hbond = mesh.get_attribute("vertex_hbond")
+    else:
+        vertex_hbond = np.array([0.0] * len(mesh.vertices))
+
+    if "vertex_hphob" in attributes:
+        vertex_hphob = mesh.get_attribute("vertex_hphob")
+    else:
+        vertex_hphob = np.array([0.0] * len(mesh.vertices))
+
+    return (
+        mesh.vertices,
+        mesh.faces,
+        normals,
+        charge,
+        vertex_cb,
+        vertex_hbond,
+        vertex_hphob,
+    )
+
+
+"""
+save_ply: Save a ply file to disk using pymesh and load the attributes used by MaSIF. 
+Pablo Gainza - LPDI STI EPFL 2019
+Released under an Apache License 2.0
+"""
+def save_ply(filename, vertices, faces=[], normals=None, charges=None, vertex_cb=None, hbond=None, hphob=None,
+             iface=None, normalize_charges=False,):
+    """
+        Save vertices, mesh in ply format.
+        vertices: coordinates of vertices
+        faces: mesh
+    """
+    mesh = pymesh.form_mesh(vertices, faces)
+    if normals is not None:
+        n1 = normals[:, 0]
+        n2 = normals[:, 1]
+        n3 = normals[:, 2]
+        mesh.add_attribute("vertex_nx")
+        mesh.set_attribute("vertex_nx", n1)
+        mesh.add_attribute("vertex_ny")
+        mesh.set_attribute("vertex_ny", n2)
+        mesh.add_attribute("vertex_nz")
+        mesh.set_attribute("vertex_nz", n3)
+    if charges is not None:
+        mesh.add_attribute("charge")
+        if normalize_charges:
+            charges = charges / 10
+        mesh.set_attribute("charge", charges)
+    if hbond is not None:
+        mesh.add_attribute("hbond")
+        mesh.set_attribute("hbond", hbond)
+    if vertex_cb is not None:
+        mesh.add_attribute("vertex_cb")
+        mesh.set_attribute("vertex_cb", vertex_cb)
+    if hphob is not None:
+        mesh.add_attribute("vertex_hphob")
+        mesh.set_attribute("vertex_hphob", hphob)
+    if iface is not None:
+        mesh.add_attribute("vertex_iface")
+        mesh.set_attribute("vertex_iface", iface)
+
+    pymesh.save_mesh(filename, mesh, *mesh.get_attribute_names(), use_float=True, ascii=True)
+
+
+"""
+protonate: Wrapper method for the reduce program: protonate (i.e., add hydrogens) a pdb using reduce 
+                and save to an output file.
+Pablo Gainza - LPDI STI EPFL 2019
+Released under an Apache License 2.0
+"""
+def protonate(in_pdb_file, out_pdb_file):
+    # protonate (i.e., add hydrogens) a pdb using reduce and save to an output file.
+    # in_pdb_file: file to protonate.
+    # out_pdb_file: output file where to save the protonated pdb file.
+
+    # Remove protons first, in case the structure is already protonated
+    args = ["reduce", "-Trim", in_pdb_file]
+    p2 = Popen(args, stdout=PIPE, stderr=PIPE)
+    stdout, stderr = p2.communicate()
+    outfile = open(out_pdb_file, "w")
+    outfile.write(stdout.decode('utf-8').rstrip())
+    outfile.close()
+    # Now add them again.
+    args = ["reduce", "-HIS", out_pdb_file]
+    p2 = Popen(args, stdout=PIPE, stderr=PIPE)
+    stdout, stderr = p2.communicate()
+    outfile = open(out_pdb_file, "w")
+    outfile.write(stdout.decode('utf-8'))
+    outfile.close()
+
