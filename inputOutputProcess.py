@@ -9,12 +9,38 @@ Last modified: 2022-09-11 20:46:54
 
 import numpy as np
 import pymesh
+import itertools
 
+from commonFuncs import *
+from parseConfig import GlobalVars
+
+from scipy import spatial
+from biopandas.pdb import PandasPdb
 from subprocess import Popen, PIPE
+from collections import namedtuple
 from Bio.PDB import StructureBuilder, PDBParser, Selection, PDBIO
 from Bio.PDB.PDBIO import Select
 from Bio.SeqUtils import IUPACData
 PROTEIN_LETTERS = [x.upper() for x in IUPACData.protein_letters_3to1.keys()]
+
+
+# Exclude disordered atoms.
+class NotDisordered(Select):
+    def accept_atom(self, atom):
+        return not atom.is_disordered() or atom.get_altloc() == "A" or atom.get_altloc() == "1"
+
+
+def checkProteinChain(pdbFile, chainId, pdbHandle=None):
+    from Bio.PDB import is_aa
+    if not pdbHandle:
+        parser = PDBParser(QUIET=True)
+        pdbHandle = parser.get_structure(pdbFile, pdbFile)
+
+    chains = Selection.unfold_entities(pdbHandle, "C")
+    for c in chains:
+        if c.get_id() == chainId:
+            return is_aa(c.get_list()[0])
+    return False
 
 
 def read_msms(file_root):
@@ -76,12 +102,6 @@ def read_msms(file_root):
     return vertices, faces, normalv, res_id
 
 
-# Exclude disordered atoms.
-class NotDisordered(Select):
-    def accept_atom(self, atom):
-        return not atom.is_disordered() or atom.get_altloc() == "A"  or atom.get_altloc() == "1"
-
-
 def find_modified_amino_acids(path):
     """
     Contributed by github user jomimc - find modified amino acids in the PDB (e.g. MSE)
@@ -97,7 +117,158 @@ def find_modified_amino_acids(path):
     return res_set
 
 
-def extractPDB(infilename, outfilename, chain_ids=None):
+def filterpdbFiles():
+    pass
+
+
+def findProteinChainBoundNA(pdbFile, pChainId=None, naChainId=None, radius=5.0):
+    pdbId = os.path.basename(pdbFile).split(".")[0]
+    
+    ppdb = PandasPdb()
+    pdbStruc = ppdb.read_pdb(pdbFile)
+    atomDf = pdbStruc.df["ATOM"]
+
+    DNAChain = atomDf[atomDf["residue_name"].isin(["DA", "DT", "DC", "DG", "DU"])]["chain_id"].tolist()
+    DNAChain = sorted(set(DNAChain))
+    if not DNAChain:
+        DNAChain = []
+
+    RNAChain = atomDf[atomDf["residue_name"].isin(["A", "T", "C", "G", "U"])]["chain_id"].tolist()
+    RNAChain = sorted(set(RNAChain))
+    if not RNAChain:
+        RNAChain = []
+
+    NAChain = RNAChain + DNAChain
+
+    if pChainId:
+        proteinAtomDf = atomDf[atomDf["chain_id"] == pChainId]
+        atomTree = spatial.cKDTree(proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values)
+    else:
+        atomTree = spatial.cKDTree(atomDf[['x_coord', 'y_coord', 'z_coord']].values)
+
+    boundGroup = []
+    BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
+
+    if naChainId:
+        NAxyz = atomDf.loc[atomDf["chain_id"].isin([naChainId])][['x_coord', 'y_coord', 'z_coord']].values
+        atomsNearNA = atomTree.query_ball_point(NAxyz, radius, p=2., eps=0)
+        nearNAIndex = sorted(set(itertools.chain(*atomsNearNA)))
+
+        proteinChainBoundNA = sorted(set(atomDf.iloc[nearNAIndex]['chain_id'].unique()) - set(NAChain))
+        naChainType = "RNA" if naChainId in RNAChain else "DNA"
+        if proteinChainBoundNA:
+            for pChain in proteinChainBoundNA:
+                boundGroup.append(BoundTuple(pdbId, pChain, naChainId, naChainType))
+    else:
+        RNAxyz = atomDf.loc[atomDf["chain_id"].isin(RNAChain)][['x_coord', 'y_coord', 'z_coord']].values
+        if RNAxyz.any():
+            atomsNearRNA = atomTree.query_ball_point(RNAxyz, radius, p=2., eps=0)
+            nearRNAIndex = sorted(set(itertools.chain(*atomsNearRNA)))
+            proteinChainBoundRNA = sorted(set(atomDf.iloc[nearRNAIndex]['chain_id'].unique()) - set(NAChain))
+            if proteinChainBoundRNA:
+                for pChain in proteinChainBoundRNA:
+                    for i in RNAChain:
+                        boundGroup.append(BoundTuple(pdbId, pChain, i, "RNA"))
+
+        DNAxyz = atomDf.loc[atomDf["chain_id"].isin(DNAChain)][['x_coord', 'y_coord', 'z_coord']].values
+        if DNAxyz.any():
+            atomsNearDNA = atomTree.query_ball_point(DNAxyz, radius, p=2., eps=0)
+            nearDNAIndex = sorted(set(itertools.chain(*atomsNearDNA)))
+            proteinChainBoundDNA = sorted(set(atomDf.iloc[nearDNAIndex]['chain_id'].unique()) - set(NAChain))
+            if proteinChainBoundDNA:
+                for pChain in proteinChainBoundDNA:
+                    for i in DNAChain:
+                        boundGroup.append(BoundTuple(pdbId, pChain, i, "DNA"))
+
+    return boundGroup
+
+
+# def findProteinChainBoundNA(pdbFile, proteinChainId=None, naChainId=None, rnaChain=False, dnaChain=False, radius=5.0):
+#     ppdb = PandasPdb()
+#     pdbStruc = ppdb.read_pdb(pdbFile)
+#     atomDf = pdbStruc.df["ATOM"]
+#     if proteinChainId:
+#         proteinAtomDf = atomDf[atomDf["chain_id"] == proteinChainId]
+#         atomTree = spatial.cKDTree(proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values)
+#     else:
+#         atomTree = spatial.cKDTree(atomDf[['x_coord', 'y_coord', 'z_coord']].values)
+#
+#     boundGroup = []
+#     if naChainId and (rnaChain or dnaChain):
+#         NAxyz = atomDf.loc[atomDf["chain_id"].isin(naChainId)][['x_coord', 'y_coord', 'z_coord']].values
+#         atomsNearNA = atomTree.query_ball_point(NAxyz, radius, p=2., eps=0)
+#         nearNAIndex = sorted(set(itertools.chain(*atomsNearNA)))
+#
+#         proteinChainBoundNA = sorted(set(atomDf.iloc[nearNAIndex]['chain_id'].unique()) - set(naChainId))
+#         if proteinChainBoundNA:
+#             for pChain in proteinChainBoundNA:
+#                 naChainType = "RNA" if rnaChain else "DNA"
+#                 boundGroup.append((pdbFile, pChain, naChainId, naChainType))
+#         else:
+#             boundGroup.append((pdbFile, "", "", ""))
+#     else:
+#         RNAChain = atomDf[atomDf["residue_name"].isin(["A", "T", "C", "G", "U"])]["chain_id"].tolist()
+#         RNAChain = sorted(set(RNAChain))
+#         if not RNAChain:
+#             RNAChain = []
+#
+#         DNAChain = atomDf[atomDf["residue_name"].isin(["DA", "DT", "DC", "DG", "DU"])]["chain_id"].tolist()
+#         DNAChain = sorted(set(DNAChain))
+#         if not DNAChain:
+#             DNAChain = []
+#
+#         RNAxyz = atomDf.loc[atomDf["chain_id"].isin(RNAChain)][['x_coord', 'y_coord', 'z_coord']].values
+#         DNAxyz = atomDf.loc[atomDf["chain_id"].isin(DNAChain)][['x_coord', 'y_coord', 'z_coord']].values
+#
+#         atomsNearRNA = atomTree.query_ball_point(RNAxyz, radius, p=2., eps=0)
+#         nearRNAIndex = sorted(set(itertools.chain(*atomsNearRNA)))
+#         proteinChainBoundRNA = sorted(set(atomDf.iloc[nearRNAIndex]['chain_id'].unique()) - set(RNAChain) - set(DNAChain))
+#         if proteinChainBoundRNA:
+#             for pChain in proteinChainBoundRNA:
+#                 for i in RNAChain:
+#                     boundGroup.append((pdbFile, pChain, i, "RNA"))
+#         else:
+#             boundGroup.append((pdbFile, "", "", ""))
+#
+#         atomsNearDNA = atomTree.query_ball_point(DNAxyz, radius, p=2., eps=0)
+#         nearDNAIndex = sorted(set(itertools.chain(*atomsNearDNA)))
+#         proteinChainBoundDNA = sorted(set(atomDf.iloc[nearDNAIndex]['chain_id'].unique()) - set(DNAChain) -set(RNAChain))
+#         if proteinChainBoundDNA:
+#             for pChain in proteinChainBoundDNA:
+#                 for i in DNAChain:
+#                     boundGroup.append((pdbFile, pChain, i, "DNA"))
+#         else:
+#             boundGroup.append((pdbFile, "", "", ""))
+#
+#     return boundGroup
+
+
+def extractPniPDB(pdbFile, outDir, chainIds=None):
+    pniChainPairs = findProteinChainBoundNA(pdbFile)
+    pdbId = os.path.basename(pdbFile).split(".")[0]
+    outTuple = []
+    if pniChainPairs:
+        for pair in pniChainPairs:
+            if chainIds:
+                if pair.pChain in chainIds:
+                    outTuple.append(("protein", pair.pChain))
+                if pair.naChain in chainIds:
+                    outTuple.append((pair.naType, pair.naChain))
+            else:
+                outTuple.append(("protein", pair.pChain))
+                outTuple.append((pair.naType, pair.naChain))
+
+    for t in set(outTuple):
+        chainType, chain = t[0], t[1]
+        tmpOutDir = os.path.join(outDir, chainType)
+        resolveDir(tmpOutDir, chdir=False)
+        outFile = os.path.join(tmpOutDir, str(pdbId) + "_" + chain + ".pdb")
+        # outFile = os.path.join(tmpOutDir, ".".join([pdbId, "_".join([chainType, chain]), "pdb"]))
+        extractPDB(pdbFile, outFile, chainIds=[chain])
+
+    return pniChainPairs
+
+def extractPDB(infilename, outfilename, chainIds=None):
     """
     extractPDB: Extract selected chains from a PDB and save the extracted chains to an output file.
     Pablo Gainza - LPDI STI EPFL 2019
@@ -121,7 +292,7 @@ def extractPDB(infilename, outfilename, chain_ids=None):
     modified_amino_acids = find_modified_amino_acids(infilename)
 
     for chain in model:
-        if (chain_ids == None or chain.get_id() in chain_ids):
+        if chainIds == None or chain.get_id() in chainIds:
             structBuild.init_chain(chain.get_id())
             for residue in chain:
                 het = residue.get_id()
@@ -243,14 +414,17 @@ def protonate(in_pdb_file, out_pdb_file):
     # out_pdb_file: output file where to save the protonated pdb file.
 
     # Remove protons first, in case the structure is already protonated
-    args = ["reduce", "-Trim", in_pdb_file]
+    globalVars = GlobalVars()
+    globalVars.initation()
+
+    args = [globalVars.reduce_bin, "-Trim", in_pdb_file]
     p2 = Popen(args, stdout=PIPE, stderr=PIPE)
     stdout, stderr = p2.communicate()
     outfile = open(out_pdb_file, "w")
     outfile.write(stdout.decode('utf-8').rstrip())
     outfile.close()
     # Now add them again.
-    args = ["reduce", "-HIS", out_pdb_file]
+    args = [globalVars.reduce_bin, "-HIS", out_pdb_file]
     p2 = Popen(args, stdout=PIPE, stderr=PIPE)
     stdout, stderr = p2.communicate()
     outfile = open(out_pdb_file, "w")

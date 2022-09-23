@@ -15,7 +15,7 @@ import numpy as np
 # from Bio.PDB import *
 
 from IPython.core.debugger import set_trace
-from defaultConfig import DefaultConfig
+from parseConfig import DefaultConfig
 from triangulation import (computeMSMS, fixMesh, computeHydrophobicity, computeCharges, assignChargesToNewMesh,
                            computeAPBS, compute_normal)
 from inputOutputProcess import (extractPDB, protonate, read_ply, save_ply)

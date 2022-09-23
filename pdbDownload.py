@@ -7,37 +7,75 @@ Created on: 2022-09-11 20:47:44
 Last modified: 2022-09-11 20:47:44
 '''
 
-import os, sys
-from Bio.PDB import * 
-from defaultConfig import DefaultConfig
+# import os, sys, importlib
+from Bio.PDB import *
+
+from commonFuncs import *
+# from parseConfig import DefaultConfig, ParseConfig
 from inputOutputProcess import protonate
+from multiprocessing import Pool, JoinableQueue
 
-masifOpts = DefaultConfig().masifOpts
+def targetPdbDownload(masifpniOpts, pdb_id, pdbl):
+    # for pdb_id in pdbIds:
+    resolveDirs([masifpniOpts['raw_pdb_dir'], masifpniOpts['tmp_dir']])
 
-if len(sys.argv) <= 1: 
-    print("Usage: "+sys.argv[0]+" PDBID_A_B")
-    print("A or B are the chains to include in this pdb.")
-    sys.exit(1)
-
-if not os.path.exists(masifOpts['raw_pdb_dir']):
-    os.makedirs(masifOpts['raw_pdb_dir'])
-
-if not os.path.exists(masifOpts['tmp_dir']):
-    os.mkdir(masifOpts['tmp_dir'])
-
-in_fields = sys.argv[1].split('_')
-pdb_id = in_fields[0]
-
-def pdbDownload(masifOpts, pdb_id):
-    # Download pdb
-    pdbl = PDBList(server='http://ftp.wwpdb.org')
-    pdb_filename = pdbl.retrieve_pdb_file(pdb_id, pdir=masifOpts['tmp_dir'], file_format='pdb')
+    protonated_file = os.path.join(masifpniOpts['raw_pdb_dir'], pdb_id + ".pdb")
+    if os.path.exists(protonated_file): return
+    pdb_filename = pdbl.retrieve_pdb_file(pdb_id, pdir=masifpniOpts['tmp_dir'], file_format='pdb', overwrite=True)
 
     ##### Protonate with reduce, if hydrogens included.
     # - Always protonate as this is useful for charges. If necessary ignore hydrogens later.
-    protonated_file = masifOpts['raw_pdb_dir']+"/"+pdb_id+".pdb"
+    # protonated_file = os.path.join(masifOpts['raw_pdb_dir'], pdb_id + ".pdb")
     protonate(pdb_filename, protonated_file)
-    pdb_filename = protonated_file
+    # pdb_filename = protonated_file
 
 
-pdbDownload(masifOpts, pdb_id)
+# def targetPdbDownload1(masifpniOpts, pdbIds=None):
+#     # Download pdb
+#     pdbl = PDBList(server='http://ftp.wwpdb.org')
+#
+#     if not pdbIds:
+#         pdbIds= pdbl.get_all_entries()
+#
+#     for pdb_id in pdbIds:
+#         resolveDirs([masifpniOpts['raw_pdb_dir'], masifpniOpts['tmp_dir']])
+#
+#         protonated_file = os.path.join(masifpniOpts['raw_pdb_dir'], pdb_id + ".pdb")
+#         if os.path.exists(protonated_file): continue
+#         pdb_filename = pdbl.retrieve_pdb_file(pdb_id, pdir=masifpniOpts['tmp_dir'], file_format='pdb')
+#
+#         ##### Protonate with reduce, if hydrogens included.
+#         # - Always protonate as this is useful for charges. If necessary ignore hydrogens later.
+#         # protonated_file = os.path.join(masifOpts['raw_pdb_dir'], pdb_id + ".pdb")
+#         protonate(pdb_filename, protonated_file)
+#         # pdb_filename = protonated_file
+
+
+def pdbDownload(argv):
+    masifpniOpts = mergeParams(argv)
+
+    pdbIds = []
+    if argv.list:
+        pdbIds = [j.split("_")[0] for j in [i for i in argv.list.split(",")]]
+    if argv.file:
+        with open(argv.file) as f:
+            for i in f.readlines():
+                pdbIds.append(i.strip().split("_")[0])
+    if not pdbIds and not argv.all:
+        pdbIds = ["4un3"]
+    pdbIds = list(set(pdbIds))
+
+    pdbl = PDBList(server='http://ftp.wwpdb.org')
+
+    q = JoinableQueue(5)
+    pool = Pool(processes=argv.n_threads)
+    for pdb_id in pdbIds:
+        pool.apply_async(targetPdbDownload, (masifpniOpts, pdb_id, pdbl))
+    pool.close()
+    pool.join()
+
+    q.join()
+
+    removeDirs([masifpniOpts["tmp_dir"]])
+    # for pdb_id in pdbIds:
+    #     targetPdbDownload(masifpniOpts, pdb_id, pdbl)

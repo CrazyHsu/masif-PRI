@@ -19,6 +19,7 @@ import pymesh
 import scipy.linalg
 import networkx as nx
 import numpy as np
+
 from sklearn.manifold import MDS
 from IPython.core.debugger import set_trace
 from numpy.linalg import norm

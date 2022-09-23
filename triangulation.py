@@ -21,7 +21,7 @@ from Bio.PDB.vectors import *
 # from defaultConfig.chemistry import radii, polarHydrogens
 
 from inputOutputProcess import read_msms
-from defaultConfig import DefaultConfig, GlobalVars
+from parseConfig import DefaultConfig, GlobalVars
 from sklearn.neighbors import KDTree
 # from triangulation.xyzrn import output_pdb_as_xyzrn
 # from default_config.global_vars import msms_bin
@@ -37,6 +37,7 @@ hbond_std_dev = defaultConfig.hbond_std_dev
 donorAtom = defaultConfig.donorAtom
 
 globalVars = GlobalVars()
+globalVars.initation()
 apbs_bin = globalVars.apbs_bin
 pdb2pqr_bin = globalVars.pdb2pqr_bin
 multivalue_bin = globalVars.multivalue_bin
@@ -47,13 +48,15 @@ Pablo Gainza LPDI EPFL 2017-2019
 Calls MSMS and returns the vertices.
 Special atoms are atoms with a reduced radius.
 '''
-def computeMSMS(pdb_file,  protonate=True):
-    defaultConfig = DefaultConfig()
+def computeMSMS(pdb_file, masifpniOpts=None, protonate=True):
     globalVars = GlobalVars()
+    globalVars.initation()
 
-    masifOpts = defaultConfig.masifOpts
-    randnum = random.randint(1,10000000)
-    file_base = masifOpts['tmp_dir']+"/msms_"+str(randnum)
+    if not masifpniOpts:
+        defaultConfig = DefaultConfig()
+        masifpniOpts = defaultConfig.masifpniOpts
+    randnum = random.randint(1, 10000000)
+    file_base = masifpniOpts['tmp_dir']+"/msms_"+str(randnum)
     out_xyzrn = file_base+".xyzrn"
 
     if protonate:
@@ -63,8 +66,8 @@ def computeMSMS(pdb_file,  protonate=True):
         sys.exit(1)
     # Now run MSMS on xyzrn file
     FNULL = open(os.devnull, 'w')
-    args = [globalVars.msms_bin, "-density", "3.0", "-hdensity", "3.0", "-probe",\
-                    "1.5", "-if",out_xyzrn,"-of",file_base, "-af", file_base]
+    args = [globalVars.msms_bin, "-density", "3.0", "-hdensity", "3.0", "-probe", "1.5", "-if", out_xyzrn,
+            "-of", file_base, "-af", file_base]
     #print msms_bin+" "+`args`
     p2 = Popen(args, stdout=PIPE, stderr=PIPE)
     stdout, stderr = p2.communicate()
@@ -77,12 +80,11 @@ def computeMSMS(pdb_file,  protonate=True):
         fields = line.split()
         areas[fields[3]] = fields[1]
 
-
     # Remove temporary files.
-    os.remove(file_base+'.area')
-    os.remove(file_base+'.xyzrn')
-    os.remove(file_base+'.vert')
-    os.remove(file_base+'.face')
+    os.remove(file_base + '.area')
+    os.remove(file_base + '.xyzrn')
+    os.remove(file_base + '.vert')
+    os.remove(file_base + '.face')
     return vertices, faces, normals, names, areas
 
 def output_pdb_as_xyzrn(pdbfilename, xyzrnfilename):
@@ -124,15 +126,11 @@ def output_pdb_as_xyzrn(pdbfilename, xyzrnfilename):
             if atomtype == "H":
                 if name in polarHydrogens[resname]:
                     color = "Blue"  # Polar hydrogens
-            coords = "{:.06f} {:.06f} {:.06f}".format(
-                atom.get_coord()[0], atom.get_coord()[1], atom.get_coord()[2]
-            )
+            coords = "{:.06f} {:.06f} {:.06f}".format(atom.get_coord()[0], atom.get_coord()[1], atom.get_coord()[2])
             insertion = "x"
             if residue.get_id()[2] != " ":
                 insertion = residue.get_id()[2]
-            full_id = "{}_{:d}_{}_{}_{}_{}".format(
-                chain, residue.get_id()[1], insertion, resname, name, color
-            )
+            full_id = "{}_{:d}_{}_{}_{}_{}".format(chain, residue.get_id()[1], insertion, resname, name, color)
         if coords is not None:
             outfile.write(coords + " " + radii[atomtype] + " 1 " + full_id + "\n")
 
@@ -163,8 +161,7 @@ def fixMesh(mesh, resolution, detail="normal"):
     num_vertices = mesh.num_vertices
     while True:
         mesh, __ = pymesh.collapse_short_edges(mesh, 1e-6)
-        mesh, __ = pymesh.collapse_short_edges(mesh, target_len,
-                                               preserve_feature=True)
+        mesh, __ = pymesh.collapse_short_edges(mesh, target_len, preserve_feature=True)
         mesh, __ = pymesh.remove_obtuse_triangles(mesh, 150.0, 100)
         if mesh.num_vertices == num_vertices:
             break
@@ -262,9 +259,7 @@ def computeCharges(pdb_filename, vertices, names):
         if atom_name == "O" and res_id in satisfied_CO:
             continue
         # Compute the charge of the vertex
-        charge[ix] = computeChargeHelper(
-            atom_name, residues[(chain_id, res_id)], vertices[ix]
-        )
+        charge[ix] = computeChargeHelper(atom_name, residues[(chain_id, res_id)], vertices[ix])
 
     return charge
 
@@ -411,9 +406,7 @@ def assignChargesToNewMesh(new_vertices, old_vertices, old_charges, seeder_opts)
 
             total_dist = np.sum(1 / dist_old)
             for i in range(num_inter):
-                new_charges[vi_new] += (
-                    old_charges[vi_old[i]] * (1 / dist_old[i]) / total_dist
-                )
+                new_charges[vi_new] += old_charges[vi_old[i]] * (1 / dist_old[i]) / total_dist
     else:
         # Assign k old vertices to each new vertex.
         kdt = KDTree(dataset)
@@ -436,15 +429,7 @@ def computeAPBS(vertices, pdb_file, tmp_file_base):
     directory = "/".join(fields) + "/"
     filename_base = tmp_file_base.split("/")[-1]
     pdbname = pdb_file.split("/")[-1]
-    args = [
-        pdb2pqr_bin,
-        "--ff=parse",
-        "--whitespace",
-        "--noopt",
-        "--apbs-input",
-        pdbname,
-        filename_base,
-    ]
+    args = [pdb2pqr_bin, "--ff=parse", "--whitespace", "--noopt", "--apbs-input", pdbname, filename_base]
     p2 = Popen(args, stdout=PIPE, stderr=PIPE, cwd=directory)
     stdout, stderr = p2.communicate()
 
@@ -457,12 +442,7 @@ def computeAPBS(vertices, pdb_file, tmp_file_base):
         vertfile.write("{},{},{}\n".format(vert[0], vert[1], vert[2]))
     vertfile.close()
 
-    args = [
-        multivalue_bin,
-        filename_base + ".csv",
-        filename_base + ".dx",
-        filename_base + "_out.csv",
-    ]
+    args = [multivalue_bin, filename_base + ".csv", filename_base + ".dx", filename_base + "_out.csv"]
     p2 = Popen(args, stdout=PIPE, stderr=PIPE, cwd=directory)
     stdout, stderr = p2.communicate()
 
