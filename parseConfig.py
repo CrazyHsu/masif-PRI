@@ -143,7 +143,7 @@ class DefaultConfig(object):
         masifpniOpts["extract_pdb"] = os.path.join(masifpniOpts["out_base_dir"], "data_preparation", "extract_pdb")
 
         # Default files
-        masifpniOpts["default_pdb_file"] = os.path.join(masifpniOpts["out_base_dir"], "default_pdb_file")
+        masifpniOpts["default_pdb_file"] = os.path.join("defaultFiles", "default_pdb_file")
         masifpniOpts["pni_pairs_file"] = os.path.join(masifpniOpts["out_base_dir"], "pni_pairs_file.npy")
         masifpniOpts["setting_log"] = os.path.join(masifpniOpts["out_base_dir"], "setting_log.txt")
 
@@ -191,8 +191,8 @@ class DefaultConfig(object):
 
         # Neural network patch application specific parameters.
         masifpniOpts["masifpni_site"] = {}
-        masifpniOpts["masifpni_site"]["training_list"] = "lists/training.txt"
-        masifpniOpts["masifpni_site"]["testing_list"] = "lists/testing.txt"
+        masifpniOpts["masifpni_site"]["training_list"] = "defaultFiles/masifpni_site_train.txt"
+        masifpniOpts["masifpni_site"]["testing_list"] = "defaultFiles/masifpni_site_test.txt"
         masifpniOpts["masifpni_site"]["max_shape_size"] = 100
         masifpniOpts["masifpni_site"]["n_conv_layers"] = 3
         masifpniOpts["masifpni_site"]["max_distance"] = 9.0  # Radius for the neural network.

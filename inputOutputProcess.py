@@ -123,6 +123,7 @@ def filterpdbFiles():
 
 def findProteinChainBoundNA(pdbFile, pChainId=None, naChainId=None, radius=5.0):
     pdbId = os.path.basename(pdbFile).split(".")[0]
+    pdbId = pdbId.split("_")[0]
     
     ppdb = PandasPdb()
     pdbStruc = ppdb.read_pdb(pdbFile)

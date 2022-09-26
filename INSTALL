@@ -1,0 +1,7 @@
+conda create -n masifpni_py36 python=3.6
+conda activate masifpni_py36
+
+conda install -c bioconda biopython biopandas=0.2.3
+conda install -c conda-forge pymesh2
+conda install -c conda-forge tensorflow=1.9.0
+pip install sklearn networkx configparser

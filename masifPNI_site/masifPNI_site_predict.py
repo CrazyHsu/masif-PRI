@@ -9,15 +9,16 @@ Last modified: 2022-09-12 16:42:58
 
 import time, os, sys, importlib
 import numpy as np
+
+from Bio.PDB import PDBList
+from collections import namedtuple
+from multiprocessing import Pool, JoinableQueue
+
+from commonFuncs import *
 from parseConfig import DefaultConfig
+from pdbDownload import targetPdbDownload
 from masifPNI_site.masifPNI_site_train import pad_indices
 from masifPNI_site.masifPNI_site_nn import MasifPNI_site_nn
-
-
-# Apply mask to input_feat
-def mask_input_feat(input_feat, mask):
-    mymask = np.where(np.array(mask) == 0.0)[0]
-    return np.delete(input_feat, mymask, axis=2)
 
 
 # Run masif site on a protein, on a previously trained network.
@@ -42,106 +43,96 @@ Pablo Gainza - LPDI STI EPFL 2019
 This file is part of MaSIF.
 Released under an Apache License 2.0
 """
-def masifPRI_site_predict(argv):
-    masifOpts = DefaultConfig().masifpniOpts
-    params = masifOpts["masifPNI_site"]
+def masifPNI_site_predict(argv):
+    masifpniOpts = mergeParams(argv)
+    params = masifpniOpts["masifpni_site"]
 
-    if argv.config:
-        custom_params_file = argv.config
-        custom_params = importlib.import_module(custom_params_file, package=None)
-        custom_params = custom_params.custom_params
-
-        for key in custom_params:
-            print("Setting {} to {} ".format(key, custom_params[key]))
-            params[key] = custom_params[key]
+    if masifpniOpts["use_gpu"]:
+        idx_xpu = masifpniOpts["gpu_dev"] if masifpniOpts["gpu_dev"] else "/gpu:0"
+    else:
+        idx_xpu = masifpniOpts["cpu_dev"] if masifpniOpts["cpu_dev"] else "/cpu:0"
 
     # Set precomputation dir.
     parent_in_dir = params["masif_precomputation_dir"]
+    precomputatedIds = os.listdir(parent_in_dir)
     eval_list = []
 
+    if argv.list:
+        eval_list = getIdChainPairs(masifpniOpts, fromList=argv.list.split(","))
+    if argv.file:
+        eval_list = getIdChainPairs(masifpniOpts, fromFile=argv.file)
+    if argv.custom_pdb:
+        eval_list = getIdChainPairs(masifpniOpts, fromCustomPDB=argv.custom_pdb)
 
-    if len(argv) == 3:
-        ppi_pair_ids = [argv[2]]
-    # Read a list of pdb_chain entries to evaluate.
-    elif len(argv) == 4 and argv[2] == "-l":
-        listfile = open(argv[3])
-        ppi_pair_ids = []
-        for line in listfile:
-            eval_list.append(line.rstrip())
-        for mydir in os.listdir(parent_in_dir):
-            ppi_pair_ids.append(mydir)
-    else:
-        sys.exit(1)
+    if len(eval_list) == 0:
+        print("Please input the PDB ids or PDB files that you want to evaluate.")
+        return
 
     # Build the neural network model
 
-    learning_obj = MasifPRI_site_nn(
+    learning_obj = MasifPNI_site_nn(
         params["max_distance"],
         n_thetas=4,
         n_rhos=3,
         n_rotations=4,
-        idx_gpu="/gpu:0",
-        feat_mask=params["feat_mask"],
+        idx_xpu=idx_xpu,
+        feat_mask=params["n_feat"] * [1.0],
         n_conv_layers=params["n_conv_layers"],
     )
     print("Restoring model from: " + params["model_dir"] + "model")
-    learning_obj.saver.restore(learning_obj.session, params["model_dir"] + "model")
+    # learning_obj.saver.restore(learning_obj.session, params["model_dir"] + "model")
 
     if not os.path.exists(params["out_pred_dir"]):
         os.makedirs(params["out_pred_dir"])
 
-    for ppi_pair_id in ppi_pair_ids:
-        print(ppi_pair_id)
-        in_dir = parent_in_dir + ppi_pair_id + "/"
+    idToDownload = [r.PDB_id for r in eval_list if r.PDB_id not in precomputatedIds]
+    idToDownload = list(set(idToDownload))
+    if len(idToDownload):
+        pdbl = PDBList(server='http://ftp.wwpdb.org')
+        q = JoinableQueue(5)
+        pool = Pool(processes=masifpniOpts["n_threads"])
+        for pid in idToDownload:
+            pool.apply_async(targetPdbDownload, (masifpniOpts, pid, pdbl))
+        pool.close()
+        pool.join()
+        q.join()
 
-        fields = ppi_pair_id.split('_')
-        if len(fields) < 2:
+    uniquePairs = []
+    for pid in eval_list:
+        if (pid.PDB_id, pid.pChain) in uniquePairs: continue
+        uniquePairs.append((pid.PDB_id, pid.pChain))
+        print("Evaluating chain {} in protein {}".format(pid.pChain, pid.PDB_id))
+
+        in_dir = os.path.join(parent_in_dir, pid.PDB_id)
+        try:
+            rho_wrt_center = np.load(os.path.join(in_dir, pid.pChain + "_rho_wrt_center.npy"))
+        except:
+            print("File not found: {}".format(os.path.join(in_dir, pid.pChain + "_rho_wrt_center.npy")))
             continue
-        pdbid = ppi_pair_id.split("_")[0]
-        chain1 = ppi_pair_id.split("_")[1]
-        pids = ["p1"]
-        chains = [chain1]
-        if len(fields) == 3 and fields[2] != "":
-            chain2 = fields[2]
-            pids = ["p1", "p2"]
-            chains = [chain1, chain2]
+        theta_wrt_center = np.load(os.path.join(in_dir, pid.pChain + "_theta_wrt_center.npy"))
+        input_feat = np.load(os.path.join(in_dir, pid.pChain + "_input_feat.npy"))
+        input_feat = mask_input_feat(input_feat, params["n_feat"] * [1.0])
+        mask = np.load(os.path.join(in_dir, pid.pChain + "_mask.npy"))
+        indices = np.load(os.path.join(in_dir, pid.pChain + "_list_indices.npy"), encoding="latin1", allow_pickle=True)
+        labels = np.zeros((len(mask)))
 
-        for ix, pid in enumerate(pids):
-            pdb_chain_id = str(pdbid) + "_" + str(chains[ix])
-            if len(eval_list) > 0 and pdb_chain_id not in eval_list and pdb_chain_id + "_" not in eval_list:
-                continue
+        print("Total number of patches:{} \n".format(len(mask)))
 
-            print("Evaluating {}".format(pdb_chain_id))
-
-            try:
-                rho_wrt_center = np.load(in_dir + pid + "_rho_wrt_center.npy")
-            except:
-                print("File not found: {}".format(in_dir + pid + "_rho_wrt_center.npy"))
-                continue
-            theta_wrt_center = np.load(in_dir + pid + "_theta_wrt_center.npy")
-            input_feat = np.load(in_dir + pid + "_input_feat.npy")
-            input_feat = mask_input_feat(input_feat, params["feat_mask"])
-            mask = np.load(in_dir + pid + "_mask.npy")
-            indices = np.load(in_dir + pid + "_list_indices.npy", encoding="latin1", allow_pickle=True)
-            labels = np.zeros((len(mask)))
-
-            print("Total number of patches:{} \n".format(len(mask)))
-
-            tic = time.time()
-            scores = run_masif_site(
-                params,
-                learning_obj,
-                rho_wrt_center,
-                theta_wrt_center,
-                input_feat,
-                mask,
-                indices,
-            )
-            toc = time.time()
-            print("Total number of patches for which scores were computed: {}\n".format(len(scores[0])))
-            print("GPU time (real time, not actual GPU time): {:.3f}s".format(toc - tic))
-            np.save(params["out_pred_dir"] + "/pred_" + pdbid + "_" + chains[ix] + ".npy", scores, )
+        tic = time.time()
+        scores = run_masif_site(
+            params,
+            learning_obj,
+            rho_wrt_center,
+            theta_wrt_center,
+            input_feat,
+            mask,
+            indices,
+        )
+        toc = time.time()
+        print("Total number of patches for which scores were computed: {}\n".format(len(scores[0])))
+        print("GPU time (real time, not actual GPU time): {:.3f}s".format(toc - tic))
+        np.save(os.path.join(params["out_pred_dir"], "pred_" + pid.PDB_id + "_" + pid.pChain + ".npy"), scores)
 
 
 if __name__ == '__main__':
-    masifPRI_site_predict(sys.argv)
+    masifPNI_site_predict(sys.argv)

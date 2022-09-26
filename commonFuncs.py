@@ -7,12 +7,92 @@ Created on: 2022-09-18 21:56:11
 Last modified: 2022-09-18 21:56:11
 '''
 
-import os, shutil
+import os, shutil, itertools
+import numpy as np
+
+from collections import namedtuple
 from parseConfig import DefaultConfig, ParseConfig
+
+# Apply mask to input_feat
+def mask_input_feat(input_feat, mask):
+    mymask = np.where(np.array(mask) == 0.0)[0]
+    return np.delete(input_feat, mymask, axis=2)
+
+
+def getIdChainPairs(masifpniOpts, fromFile=None, fromList=None, fromCustomPDB=None):
+    from Bio.SeqUtils import IUPACData
+    from biopandas.pdb import PandasPdb
+    from inputOutputProcess import findProteinChainBoundNA
+    PROTEIN_LETTERS = [x.upper() for x in IUPACData.protein_letters_3to1.keys()]
+
+    BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
+    BoundTuple.__new__.__defaults__ = ("",) * len(BoundTuple._fields)
+    myList = []
+    if fromFile:
+        with open(fromFile) as f:
+            for line in f.readlines():
+                if line.startswith("#"): continue
+                fields = line.strip().split("_")
+                pdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], fields[0] + ".pdb")
+                if len(fields) == 1:
+                    myList.extend(findProteinChainBoundNA(pdbFile))
+                elif len(fields) == 2:
+                    pChains = list(map(str, fields[1]))
+                    for pChain in pChains:
+                        myList.extend(findProteinChainBoundNA(pdbFile, pChainId=pChain))
+                else:
+                    x, y, z = line.strip().split("_")
+                    for i in list(itertools.product(list(map(str, y)), list(map(str, z)))):
+                        myList.append(BoundTuple(x, i[0], i[1], ""))
+    if fromList:
+        for l in fromList:
+            print(fromList, "####")
+            fields = l.strip().split("_")
+            pdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], fields[0] + ".pdb")
+            print(len(fields), "$$$$")
+            if len(fields) == 1:
+                myList.extend(findProteinChainBoundNA(pdbFile))
+            elif len(fields) == 2:
+                pChains = list(map(str, fields[1]))
+                for pChain in pChains:
+                    myList.extend(findProteinChainBoundNA(pdbFile, pChainId=pChain))
+            else:
+                x, y, z = fields
+                for i in list(itertools.product(list(map(str, y)), list(map(str, z)))):
+                    myList.append(BoundTuple(x, i[0], i[1], ""))
+
+    if fromCustomPDB:
+        with open(fromCustomPDB) as f:
+            for pdbFile in f.readlines():
+                if pdbFile.startswith("#"): continue
+                pdbFile = pdbFile.strip()
+                tmp = findProteinChainBoundNA(pdbFile)
+                fields = os.path.basename(pdbFile).split("_")
+                pdbId = fields[0]
+                if len(tmp) == 0:
+                    ppdb = PandasPdb()
+                    pdbStruc = ppdb.read_pdb(pdbFile)
+                    atomDf = pdbStruc.df["ATOM"]
+                    pChains = list(set(atomDf[atomDf["residue_name"].isin(PROTEIN_LETTERS)]["chain_id"].tolist()))
+                    myList.extend([BoundTuple(pdbId, i, "", "") for i in pChains])
+                else:
+                    if len(fields) == 1:
+                        myList.extend(tmp)
+                    elif len(fields) == 2:
+                        for i in fields[1]:
+                            myList.extend([j for j in tmp if j.pChain == i])
+                    else:
+                        x, y, z = fields
+                        for i in list(itertools.product(list(map(str, y)), list(map(str, z)))):
+                            for j in tmp:
+                                if i[0] == j.pChain and i[1] == j.naChain:
+                                    myList.append(BoundTuple(x, i[0], i[1], j.naType))
+
+    return myList
+
 
 def mergeParams(argv):
     masifpniOpts = DefaultConfig().masifpniOpts
-    # masifpniOpts["n_threads"] = argv.n_threads
     # params = masifOpts["masifpni_site"]
 
     outSetting = ""
@@ -37,6 +117,7 @@ def mergeParams(argv):
             outSetting += "Setting {} to {} \n".format(key, masifpniOpts[key])
             # print("Setting {} to {} ".format(key, masifpniOpts[key]), file=logfile)
 
+    masifpniOpts["n_threads"] = argv.n_threads
     logfile = open(masifpniOpts["setting_log"], "w")
     logfile.write(outSetting)
     logfile.close()

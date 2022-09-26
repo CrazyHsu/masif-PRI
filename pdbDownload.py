@@ -60,6 +60,7 @@ def pdbDownload(argv):
     if argv.file:
         with open(argv.file) as f:
             for i in f.readlines():
+                if i.startswith("#"): continue
                 pdbIds.append(i.strip().split("_")[0])
     if not pdbIds and not argv.all:
         pdbIds = ["4un3"]
@@ -68,7 +69,7 @@ def pdbDownload(argv):
     pdbl = PDBList(server='http://ftp.wwpdb.org')
 
     q = JoinableQueue(5)
-    pool = Pool(processes=argv.n_threads)
+    pool = Pool(processes=masifpniOpts["n_threads"])
     for pdb_id in pdbIds:
         pool.apply_async(targetPdbDownload, (masifpniOpts, pdb_id, pdbl))
     pool.close()
@@ -76,6 +77,4 @@ def pdbDownload(argv):
 
     q.join()
 
-    removeDirs([masifpniOpts["tmp_dir"]])
-    # for pdb_id in pdbIds:
-    #     targetPdbDownload(masifpniOpts, pdb_id, pdbl)
+    removeDirs([masifpniOpts["tmp_dir"]], empty=True)

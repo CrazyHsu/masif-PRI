@@ -32,72 +32,29 @@ def masifPNI_site_predict(argv):
     print(33)
 
 
-def end_queue(task_queue,n_processes):
-    for _ in range(n_processes):
-        task_queue.put(None)
-    return task_queue
-
-
 def test4(argv):
-    from Bio.PDB import PDBList
-    pdbl = PDBList(server='http://ftp.wwpdb.org')
-
-    from multiprocessing import Pool, JoinableQueue
-    q = JoinableQueue(5)
-    pool = Pool(processes=8)
-
-    tmp = argv.file
-    resultList = []
-    with open(tmp) as f:
-        for line in f.readlines():
-            if line.startswith("#"): continue
-            pdb_id = line.strip().split("_")[0]
-            res = pool.apply_async(pdbl.retrieve_pdb_file, kwds={"pdb_code":pdb_id, "pdir":"test_data", "file_format":'pdb', "overwrite":True})
-            resultList.append(res)
-    pool.close()
-    pool.join()
-
-    q.join()
-    for i in resultList:
-        tmp = i.get()
-        print(tmp)
-
-
-###############################
-    # locks = dict()
-    # n_processes = 2
-    # task_queue = multiprocessing.JoinableQueue(maxsize=n_processes * 2)
-    #
-    # # Create and start consumers.
-    # consumers = [Consumer(task_queue=task_queue, task_function=pdbl.retrieve_pdb_file, locks=locks) for i in range(n_processes)]
-    # for p in consumers:
-    #     p.start()
-    #
-    # tmp = argv.file
-    # with open(tmp) as f:
-    #     for line in f.readlines():
-    #         pdb_id = line.strip().split("_")[0]
-    #         task_queue.put((pdb_id, "test_data", 'pdb', "True"))
-    #
-    # task_queue = end_queue(task_queue, n_processes)
-    #
-    # # Wait for all of the tasks to finish.
-    # task_queue.join()
-
-
-    # task_queue = end_queue(task_queue, 2)
-    #
-    # # Wait for all of the tasks to finish.
-    # task_queue.join()
-
     # from Bio.PDB import PDBList
+    # pdbl = PDBList(server='http://ftp.wwpdb.org')
+    #
+    # from multiprocessing import Pool, JoinableQueue
+    # q = JoinableQueue(5)
+    # pool = Pool(processes=8)
+    #
     # tmp = argv.file
+    # resultList = []
     # with open(tmp) as f:
     #     for line in f.readlines():
+    #         if line.startswith("#"): continue
     #         pdb_id = line.strip().split("_")[0]
-    #         # print(pdb_id)
-    #         pdbl = PDBList(server='http://ftp.wwpdb.org')
-    #         pdb_filename = pdbl.retrieve_pdb_file(pdb_id, pdir="test_data", file_format='pdb', overwrite=True)
+    #         res = pool.apply_async(pdbl.retrieve_pdb_file, kwds={"pdb_code":pdb_id, "pdir":"test_data", "file_format":'pdb', "overwrite":True})
+    #         resultList.append(res)
+    # pool.close()
+    # pool.join()
+    #
+    # q.join()
+    # for i in resultList:
+    #     tmp = i.get()
+    #     print(tmp)
     print(44)
 
 
@@ -109,14 +66,12 @@ def parseArgsDownload(parser, argv):
     parser.add_argument('-f', '--file', type=str, default=None, help="File contains lists of PDB ids. One per separate line.")
     parser.add_argument('-a', "--all", action="store_true", default=False, help="Download all PDB entries.")
     parser.add_argument('-n', "--n_threads", type=int, default=1, help="The number of threads to download pdb files.")
-    # parser.set_defaults(func=test4)
     from pdbDownload import pdbDownload
     parser.set_defaults(func=pdbDownload)
 
 
 def parseArgsSite(parser, argv):
     parser.add_argument('-v', '--version', action='version', version='%(prog)s {version}'.format(version=__version__))
-
     subparsers = parser.add_subparsers(help="Modes to run masifPNI-site", metavar='{dataprep, train, predict}')
 
     parser_dataprep = subparsers.add_parser("dataprep", help="Prepare the data used in next steps")
@@ -132,26 +87,26 @@ def parseArgsSite(parser, argv):
     parser_dataprep.set_defaults(func=dataprep)
 
     parser_train = subparsers.add_parser("train", help="Train the neural network model with protein-RNA interaction complex files")
-    parser_train.add_argument('-v', '--version', action='version', version='%(prog)s {version}'.format(version=__version__))
     parser_train.add_argument('--config', dest='config', help='Config file contains the parameters to run masifPNI.', type=str)
-    parser_train.add_argument('--train_list', dest='train_list', type=str, default=False, help='The list of PDB ids used to train nucleic network model.')
-    parser_train.add_argument('--test_list', dest='test_list', type=str, default=False, help='The list of PDB ids used to test nucleic network model.')
+    parser_train.add_argument('--training_list', dest='training_list', type=str, default=False, help='The list of PDB ids used to train nucleic network model.')
+    parser_train.add_argument('--testing_list', dest='testing_list', type=str, default=False, help='The list of PDB ids used to test nucleic network model.')
     parser_train.add_argument('--draw_roc', dest='draw_roc', action="store_true", default=False, help='Whether to draw ROC plot.')
     parser_train.add_argument('-n', '--n_threads', type=int, default=1, help="Threads used to prepare files.")
-
+    parser_train.add_argument('-v', '--version', action='version', version='%(prog)s {version}'.format(version=__version__))
     from masifPNI_site.masifPNI_site_train import train_masifPNI_site1
     parser_train.set_defaults(func=train_masifPNI_site1)
-    # parser_train.set_defaults(func=train_masif_site1)
 
     parser_prection = subparsers.add_parser("predict", help="Predict the protein-RNA complex")
+    parser_prection.add_argument('--config', dest='config', help='Config file contains the parameters to run masifPNI.', type=str)
+    parser_prection.add_argument('-l', '--list', type=str, default=None, help="Lists of PDB ids, separated by comma")
+    parser_prection.add_argument('-f', '--file', type=str, default=None, help="File contains lists of PDB ids. One per separate line.")
+    parser_prection.add_argument('-custom_pdb', '--custom_pdb', type=str, default=None, help="File contain the path of custom PDB files or the directory contains the target PDB files")
+    parser_prection.add_argument('-n', '--n_threads', type=int, default=1, help="Threads used to prepare files.")
     parser_prection.add_argument('-v', '--version', action='version', version='%(prog)s {version}'.format(version=__version__))
-    parser_prection.add_argument('--gtf_or_gff', dest='gtf_or_gff', help='GTF or GFF file path.', type=str)
-    # from masifPNI_site.masifPNI_site_predict import masifPNI_site_predict
+    from masifPNI_site.masifPNI_site_predict import masifPNI_site_predict
     parser_prection.set_defaults(func=masifPNI_site_predict)
-    # parser_prection.set_defaults(func=masifPNI_site_predict)
 
     opt2parser = {"dataprep": parser_dataprep, "train": parser_train, "predict": parser_prection}
-
     if len(set(argv) - set(defaultArguments)) == 0:
         if "masifPNI-site" in argv:
             tmp = list(set(argv) & set(["dataprep", "train", "predict"]))
