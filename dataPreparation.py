@@ -104,7 +104,9 @@ def dataprep(argv):
         pdbIdChains = DefaultConfig().getListFromFile(masifpniOpts["default_pdb_file"])
     if "file" in vars(argv) and argv.file:
         with open(argv.file) as f:
-            pdbIdChains.append(f.readline().strip())
+            for line in f.readlines():
+                if line.startswith("#"): continue
+                pdbIdChains.append(line.strip())
     if "list" in vars(argv) and argv.list:
         pdbIdChains.extend(argv.list.split(","))
 
