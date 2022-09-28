@@ -11,44 +11,29 @@ Last modified: 2022-09-11 20:47:44
 from Bio.PDB import *
 
 from commonFuncs import *
-# from parseConfig import DefaultConfig, ParseConfig
 from inputOutputProcess import protonate
-from multiprocessing import Pool, JoinableQueue
+# from multiprocessing import Pool, JoinableQueue
 
-def targetPdbDownload(masifpniOpts, pdb_id, pdbl):
-    # for pdb_id in pdbIds:
+def targetPdbDownload(masifpniOpts, pdb_id, pdbl, overwrite=True):
     resolveDirs([masifpniOpts['raw_pdb_dir'], masifpniOpts['tmp_dir']])
 
     protonated_file = os.path.join(masifpniOpts['raw_pdb_dir'], pdb_id + ".pdb")
-    if os.path.exists(protonated_file): return
-    pdb_filename = pdbl.retrieve_pdb_file(pdb_id, pdir=masifpniOpts['tmp_dir'], file_format='pdb', overwrite=True)
+    # print(masifpniOpts['tmp_dir'])
+    pdb_filename = ""
+    if overwrite:
+        pdb_filename = pdbl.retrieve_pdb_file(pdb_id, pdir=masifpniOpts['tmp_dir'], file_format='pdb', overwrite=overwrite)
+    else:
+        if os.path.exists(protonated_file): return
 
     ##### Protonate with reduce, if hydrogens included.
     # - Always protonate as this is useful for charges. If necessary ignore hydrogens later.
-    # protonated_file = os.path.join(masifOpts['raw_pdb_dir'], pdb_id + ".pdb")
-    protonate(pdb_filename, protonated_file)
+    unDownload = []
+    if os.path.exists(pdb_filename):
+        protonate(pdb_filename, protonated_file)
+    else:
+        unDownload.append(pdb_id)
+    return unDownload
     # pdb_filename = protonated_file
-
-
-# def targetPdbDownload1(masifpniOpts, pdbIds=None):
-#     # Download pdb
-#     pdbl = PDBList(server='http://ftp.wwpdb.org')
-#
-#     if not pdbIds:
-#         pdbIds= pdbl.get_all_entries()
-#
-#     for pdb_id in pdbIds:
-#         resolveDirs([masifpniOpts['raw_pdb_dir'], masifpniOpts['tmp_dir']])
-#
-#         protonated_file = os.path.join(masifpniOpts['raw_pdb_dir'], pdb_id + ".pdb")
-#         if os.path.exists(protonated_file): continue
-#         pdb_filename = pdbl.retrieve_pdb_file(pdb_id, pdir=masifpniOpts['tmp_dir'], file_format='pdb')
-#
-#         ##### Protonate with reduce, if hydrogens included.
-#         # - Always protonate as this is useful for charges. If necessary ignore hydrogens later.
-#         # protonated_file = os.path.join(masifOpts['raw_pdb_dir'], pdb_id + ".pdb")
-#         protonate(pdb_filename, protonated_file)
-#         # pdb_filename = protonated_file
 
 
 def pdbDownload(argv):
@@ -67,14 +52,16 @@ def pdbDownload(argv):
     pdbIds = list(set(pdbIds))
 
     pdbl = PDBList(server='http://ftp.wwpdb.org')
-
-    q = JoinableQueue(5)
-    pool = Pool(processes=masifpniOpts["n_threads"])
+    targetPdbDownloadBatchRun = []
     for pdb_id in pdbIds:
-        pool.apply_async(targetPdbDownload, (masifpniOpts, pdb_id, pdbl))
-    pool.close()
-    pool.join()
+        pdbFile = os.path.join(masifpniOpts['raw_pdb_dir'], pdb_id + ".pdb")
+        if os.path.exists(pdbFile): continue
+        targetPdbDownloadBatchRun.append((masifpniOpts, pdb_id, pdbl, argv.overwrite))
+    resultList = batchRun(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"])
 
-    q.join()
+    unDownload = list(itertools.chain.from_iterable([i.get() for i in resultList]))
+    with open(os.path.join(masifpniOpts["log_dir"], "unable_download.txt"), "w") as f:
+        for i in unDownload:
+            print(i, file=f)
 
     removeDirs([masifpniOpts["tmp_dir"]], empty=True)

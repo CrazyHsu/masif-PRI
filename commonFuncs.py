@@ -13,7 +13,27 @@ import numpy as np
 from collections import namedtuple
 from parseConfig import DefaultConfig, ParseConfig
 
+BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
+BoundTuple.__new__.__defaults__ = ("",) * len(BoundTuple._fields)
+
 # Apply mask to input_feat
+def batchRun(myFunc, argList, n_threads=1):
+    from multiprocessing import Pool, JoinableQueue
+    resultList = []
+    # q = JoinableQueue(5)
+    pool = Pool(processes=n_threads)
+    for arg in argList:
+        if len(arg) == 1:
+            res = pool.apply_async(myFunc, (arg[0], ))
+        else:
+            res = pool.apply_async(myFunc, arg)
+        resultList.append(res)
+    pool.close()
+    pool.join()
+    # q.join()
+    return resultList
+
+
 def mask_input_feat(input_feat, mask):
     mymask = np.where(np.array(mask) == 0.0)[0]
     return np.delete(input_feat, mymask, axis=2)
@@ -25,8 +45,8 @@ def getIdChainPairs(masifpniOpts, fromFile=None, fromList=None, fromCustomPDB=No
     from inputOutputProcess import findProteinChainBoundNA
     PROTEIN_LETTERS = [x.upper() for x in IUPACData.protein_letters_3to1.keys()]
 
-    BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
-    BoundTuple.__new__.__defaults__ = ("",) * len(BoundTuple._fields)
+    # BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
+    # BoundTuple.__new__.__defaults__ = ("",) * len(BoundTuple._fields)
     myList = []
     if fromFile:
         with open(fromFile) as f:
@@ -99,8 +119,6 @@ def mergeParams(argv):
     if argv.config:
         custom_params_file = argv.config
         custom_params = ParseConfig(custom_params_file).params
-        # custom_params = importlib.import_module(custom_params_file, package=None)
-        # custom_params = custom_params.custom_params
 
         for key in custom_params:
             if key not in ["masifpni_site", "masifpni_search", "masifpni_ligand"]:
@@ -118,6 +136,7 @@ def mergeParams(argv):
             # print("Setting {} to {} ".format(key, masifpniOpts[key]), file=logfile)
 
     masifpniOpts["n_threads"] = argv.n_threads
+    resolveDir(masifpniOpts["log_dir"])
     logfile = open(masifpniOpts["setting_log"], "w")
     logfile.write(outSetting)
     logfile.close()

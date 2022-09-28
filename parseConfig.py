@@ -24,8 +24,8 @@ SECTION_TYPE_LIST_ORIGIN = [DIR_SECTION, FILE_SECTION, SYS_SECTION, SURFEAT_SECT
                             MASIFPNISEARCH_SECTION, MASIFPNILIGAND_SECTION]
 SECTION_TYPE_LIST_LOWER = [i.lower() for i in SECTION_TYPE_LIST_ORIGIN]
 
-DIR_TAGS = [OUT_BASE_DIR, RAW_PDB_DIR, PDB_CHAIN_DIR, PLY_CHAIN_DIR, TMP_DIR, PLY_FILE_TEMPLATE, EXTRACT_PDB] = \
-    ["out_base_dir", "raw_pdb_dir", "pdb_chain_dir", "ply_chain_dir", "tmp_dir", "ply_file_template", "extract_pdb"]
+DIR_TAGS = [OUT_BASE_DIR, RAW_PDB_DIR, PDB_CHAIN_DIR, PLY_CHAIN_DIR, TMP_DIR, LOG_DIR, PLY_FILE_TEMPLATE, EXTRACT_PDB] = \
+    ["out_base_dir", "raw_pdb_dir", "pdb_chain_dir", "ply_chain_dir", "tmp_dir", "log_dir", "ply_file_template", "extract_pdb"]
 
 FILE_TAGS = [DEFAULT_PDB_FILE, PNI_PAIRS_FILE, SETTING_LOG] = ["default_pdb_file", "pni_pairs_file", "setting_log"]
 
@@ -139,8 +139,9 @@ class DefaultConfig(object):
         masifpniOpts["pdb_chain_dir"] = os.path.join(masifpniOpts["out_base_dir"], "data_preparation", "01-benchmark_pdbs")
         masifpniOpts["ply_chain_dir"] = os.path.join(masifpniOpts["out_base_dir"], "data_preparation", "01-benchmark_surfaces")
         masifpniOpts["tmp_dir"] = tempfile.gettempdir()
-        masifpniOpts["ply_file_template"] = os.path.join(os.path.join(masifpniOpts["ply_chain_dir"], "{}_{}.ply"))
+        masifpniOpts["log_dir"] = os.path.join(masifpniOpts["out_base_dir"], "log")
         masifpniOpts["extract_pdb"] = os.path.join(masifpniOpts["out_base_dir"], "data_preparation", "extract_pdb")
+        masifpniOpts["ply_file_template"] = os.path.join(os.path.join(masifpniOpts["ply_chain_dir"], "{}_{}.ply"))
 
         # Default files
         masifpniOpts["default_pdb_file"] = os.path.join("defaultFiles", "default_pdb_file")

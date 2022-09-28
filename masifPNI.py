@@ -65,6 +65,7 @@ def parseArgsDownload(parser, argv):
     parser.add_argument('-l', '--list', type=str, default=None, help="Lists of PDB ids, separated by comma")
     parser.add_argument('-f', '--file', type=str, default=None, help="File contains lists of PDB ids. One per separate line.")
     parser.add_argument('-a', "--all", action="store_true", default=False, help="Download all PDB entries.")
+    parser.add_argument('-overwrite', "--overwrite", action="store_true", default=False, help="Overwrite existing PDB files.")
     parser.add_argument('-n', "--n_threads", type=int, default=1, help="The number of threads to download pdb files.")
     from pdbDownload import pdbDownload
     parser.set_defaults(func=pdbDownload)
@@ -81,6 +82,8 @@ def parseArgsSite(parser, argv):
     optional_dataprep.add_argument('-l', '--list', type=str, default=None, help="Lists of PDB ids, separated by comma")
     optional_dataprep.add_argument('-f', '--file', type=str, default=None, help="File contains lists of PDB ids. One per separate line.")
     optional_dataprep.add_argument('-n', '--n_threads', type=int, default=1, help="Threads used to prepare files.")
+    optional_dataprep.add_argument('-overwrite', "--overwrite", action="store_true", default=False, help="Overwrite existing PDB files.")
+    optional_dataprep.add_argument('-add_default', "--add_default", action="store_true", default=False, help="Add default PDB ids to list used to data preparation.")
     optional_dataprep.add_argument('-v', '--version', action='version', version='%(prog)s {version}'.format(version=__version__))
     parser_dataprep._action_groups.append(optional_dataprep)
     from dataPreparation import dataprep

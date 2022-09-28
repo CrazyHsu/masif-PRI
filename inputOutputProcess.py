@@ -148,7 +148,7 @@ def findProteinChainBoundNA(pdbFile, pChainId=None, naChainId=None, radius=5.0):
         atomTree = spatial.cKDTree(atomDf[['x_coord', 'y_coord', 'z_coord']].values)
 
     boundGroup = []
-    BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
+    # BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
 
     if naChainId:
         NAxyz = atomDf.loc[atomDf["chain_id"].isin([naChainId])][['x_coord', 'y_coord', 'z_coord']].values

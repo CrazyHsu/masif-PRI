@@ -17,6 +17,7 @@ from multiprocessing import Pool, JoinableQueue
 from commonFuncs import *
 from parseConfig import DefaultConfig
 from pdbDownload import targetPdbDownload
+from dataPreparation import dataprepFromList
 from masifPNI_site.masifPNI_site_train import pad_indices
 from masifPNI_site.masifPNI_site_nn import MasifPNI_site_nn
 
@@ -79,23 +80,16 @@ def masifPNI_site_predict(argv):
         feat_mask=params["n_feat"] * [1.0],
         n_conv_layers=params["n_conv_layers"],
     )
-    print("Restoring model from: " + params["model_dir"] + "model")
-    # learning_obj.saver.restore(learning_obj.session, params["model_dir"] + "model")
+    print("Restoring model from: " + os.path.join(params["model_dir"], "model"))
+    learning_obj.saver.restore(learning_obj.session, os.path.join(params["model_dir"], "model"))
 
     if not os.path.exists(params["out_pred_dir"]):
         os.makedirs(params["out_pred_dir"])
 
     idToDownload = [r.PDB_id for r in eval_list if r.PDB_id not in precomputatedIds]
     idToDownload = list(set(idToDownload))
-    if len(idToDownload):
-        pdbl = PDBList(server='http://ftp.wwpdb.org')
-        q = JoinableQueue(5)
-        pool = Pool(processes=masifpniOpts["n_threads"])
-        for pid in idToDownload:
-            pool.apply_async(targetPdbDownload, (masifpniOpts, pid, pdbl))
-        pool.close()
-        pool.join()
-        q.join()
+    if len(idToDownload) > 0:
+        dataprepFromList(idToDownload, masifpniOpts)
 
     uniquePairs = []
     for pid in eval_list:
