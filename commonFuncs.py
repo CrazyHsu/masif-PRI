@@ -34,6 +34,12 @@ def batchRun(myFunc, argList, n_threads=1):
     return resultList
 
 
+def makeLink(sourcePath, targetPath):
+    if os.path.islink(targetPath) or os.path.exists(targetPath):
+        os.remove(targetPath)
+    os.symlink(sourcePath, targetPath)
+
+
 def mask_input_feat(input_feat, mask):
     mymask = np.where(np.array(mask) == 0.0)[0]
     return np.delete(input_feat, mymask, axis=2)

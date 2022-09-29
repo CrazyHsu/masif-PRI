@@ -184,66 +184,6 @@ def findProteinChainBoundNA(pdbFile, pChainId=None, naChainId=None, radius=5.0):
     return boundGroup
 
 
-# def findProteinChainBoundNA(pdbFile, proteinChainId=None, naChainId=None, rnaChain=False, dnaChain=False, radius=5.0):
-#     ppdb = PandasPdb()
-#     pdbStruc = ppdb.read_pdb(pdbFile)
-#     atomDf = pdbStruc.df["ATOM"]
-#     if proteinChainId:
-#         proteinAtomDf = atomDf[atomDf["chain_id"] == proteinChainId]
-#         atomTree = spatial.cKDTree(proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values)
-#     else:
-#         atomTree = spatial.cKDTree(atomDf[['x_coord', 'y_coord', 'z_coord']].values)
-#
-#     boundGroup = []
-#     if naChainId and (rnaChain or dnaChain):
-#         NAxyz = atomDf.loc[atomDf["chain_id"].isin(naChainId)][['x_coord', 'y_coord', 'z_coord']].values
-#         atomsNearNA = atomTree.query_ball_point(NAxyz, radius, p=2., eps=0)
-#         nearNAIndex = sorted(set(itertools.chain(*atomsNearNA)))
-#
-#         proteinChainBoundNA = sorted(set(atomDf.iloc[nearNAIndex]['chain_id'].unique()) - set(naChainId))
-#         if proteinChainBoundNA:
-#             for pChain in proteinChainBoundNA:
-#                 naChainType = "RNA" if rnaChain else "DNA"
-#                 boundGroup.append((pdbFile, pChain, naChainId, naChainType))
-#         else:
-#             boundGroup.append((pdbFile, "", "", ""))
-#     else:
-#         RNAChain = atomDf[atomDf["residue_name"].isin(["A", "T", "C", "G", "U"])]["chain_id"].tolist()
-#         RNAChain = sorted(set(RNAChain))
-#         if not RNAChain:
-#             RNAChain = []
-#
-#         DNAChain = atomDf[atomDf["residue_name"].isin(["DA", "DT", "DC", "DG", "DU"])]["chain_id"].tolist()
-#         DNAChain = sorted(set(DNAChain))
-#         if not DNAChain:
-#             DNAChain = []
-#
-#         RNAxyz = atomDf.loc[atomDf["chain_id"].isin(RNAChain)][['x_coord', 'y_coord', 'z_coord']].values
-#         DNAxyz = atomDf.loc[atomDf["chain_id"].isin(DNAChain)][['x_coord', 'y_coord', 'z_coord']].values
-#
-#         atomsNearRNA = atomTree.query_ball_point(RNAxyz, radius, p=2., eps=0)
-#         nearRNAIndex = sorted(set(itertools.chain(*atomsNearRNA)))
-#         proteinChainBoundRNA = sorted(set(atomDf.iloc[nearRNAIndex]['chain_id'].unique()) - set(RNAChain) - set(DNAChain))
-#         if proteinChainBoundRNA:
-#             for pChain in proteinChainBoundRNA:
-#                 for i in RNAChain:
-#                     boundGroup.append((pdbFile, pChain, i, "RNA"))
-#         else:
-#             boundGroup.append((pdbFile, "", "", ""))
-#
-#         atomsNearDNA = atomTree.query_ball_point(DNAxyz, radius, p=2., eps=0)
-#         nearDNAIndex = sorted(set(itertools.chain(*atomsNearDNA)))
-#         proteinChainBoundDNA = sorted(set(atomDf.iloc[nearDNAIndex]['chain_id'].unique()) - set(DNAChain) -set(RNAChain))
-#         if proteinChainBoundDNA:
-#             for pChain in proteinChainBoundDNA:
-#                 for i in DNAChain:
-#                     boundGroup.append((pdbFile, pChain, i, "DNA"))
-#         else:
-#             boundGroup.append((pdbFile, "", "", ""))
-#
-#     return boundGroup
-
-
 def extractPniPDB(pdbFile, outDir, chainIds=None):
     pniChainPairs = findProteinChainBoundNA(pdbFile)
     pdbId = os.path.basename(pdbFile).split(".")[0]

@@ -36,32 +36,37 @@ def dataprepFromList(pdbIdChains, masifpniOpts):
 
     removeDirs([masifpniOpts["tmp_dir"]], empty=True)
 
-    # selectPniChainPairs = []
-    extractPniPDBbatchRun = []
-    pdbId2field = {}
-    for i in set(pdbIdChains) - set(unDownload):
-        in_fields = i.split("_")
-        pdb_id = in_fields[0]
-        chainIds = list(itertools.chain.from_iterable([list(map(str, j)) for j in in_fields[1:]]))
-        pdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], pdb_id + ".pdb")
-        extractPniPDBbatchRun.append((pdbFile, masifpniOpts["extract_pdb"], chainIds))
-        pdbId2field[pdb_id] = in_fields
-
-    resultList = batchRun(extractPniPDB, extractPniPDBbatchRun, n_threads=masifpniOpts["n_threads"])
-    pniChainPairs = list(itertools.chain.from_iterable([i.get() for i in resultList]))
-
+    resumeFromChainPairs = False
     selectPniChainPairs = []
-    for i in pniChainPairs:
-        fields = pdbId2field[i.PDB_id]
-        if len(fields) == 1:
-            selectPniChainPairs.append(i)
-        elif len(fields) == 2:
-            if i.pChain in fields[1]:
+    if not resumeFromChainPairs:
+        extractPniPDBbatchRun = []
+        pdbId2field = {}
+        for i in set(pdbIdChains) - set(unDownload):
+            in_fields = i.split("_")
+            pdb_id = in_fields[0]
+            chainIds = list(itertools.chain.from_iterable([list(map(str, j)) for j in in_fields[1:]]))
+            pdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], pdb_id + ".pdb")
+            if not os.path.exists(pdbFile): continue
+            extractPniPDBbatchRun.append((pdbFile, masifpniOpts["extract_pdb"], chainIds))
+            pdbId2field[pdb_id] = in_fields
+
+        resultList = batchRun(extractPniPDB, extractPniPDBbatchRun, n_threads=masifpniOpts["n_threads"])
+        pniChainPairs = list(itertools.chain.from_iterable([i.get() for i in resultList]))
+        for i in pniChainPairs:
+            fields = pdbId2field[i.PDB_id]
+            if len(fields) == 1:
                 selectPniChainPairs.append(i)
-        else:
-            if i.pChain in fields[1] and i.naChain in fields[2]:
-                selectPniChainPairs.append(i)
-    np.save(masifpniOpts["pni_pairs_file"], selectPniChainPairs)
+            elif len(fields) == 2:
+                if i.pChain in fields[1]:
+                    selectPniChainPairs.append(i)
+            else:
+                if i.pChain in fields[1] and i.naChain in fields[2]:
+                    selectPniChainPairs.append(i)
+        np.save(masifpniOpts["pni_pairs_file"], selectPniChainPairs)
+    else:
+        tmp = np.load(masifpniOpts["pni_pairs_file"])
+        for pair in tmp:
+            selectPniChainPairs.append(BoundTuple(*pair.tolist()))
 
     GlobalVars().setEnviron()
 

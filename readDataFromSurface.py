@@ -12,6 +12,7 @@ import pymesh
 import numpy as np
 from scipy.spatial import cKDTree
 
+from commonFuncs import makeLink
 from geometry import compute_polar_coordinates
 from inputOutputProcess import save_ply
 from sklearn.neighbors import KDTree
@@ -386,8 +387,10 @@ def extractProteinTriangulate(masifpniOpts, pdbFile, rawPdbFile):
     if not os.path.exists(masifpniOpts['pdb_chain_dir']):
         os.makedirs(masifpniOpts['pdb_chain_dir'])
 
-    shutil.copy(pdbFileBase + '.ply', masifpniOpts['ply_chain_dir'])
-    shutil.copy(pdbFileBase + '.pdb', masifpniOpts['pdb_chain_dir'])
+    makeLink(os.path.realpath(pdbFileBase + '.ply'), os.path.join(masifpniOpts['ply_chain_dir'], pdbFileBase + '.ply'))
+    makeLink(os.path.realpath(pdbFileBase + '.pdb'), os.path.join(masifpniOpts['pdb_chain_dir'], pdbFileBase + '.pdb'))
+    # shutil.copy(pdbFileBase + '.ply', masifpniOpts['ply_chain_dir'])
+    # shutil.copy(pdbFileBase + '.pdb', masifpniOpts['pdb_chain_dir'])
 
 
 def extractNaTriangulate(masifpniOpts, pdbFile, naType, rawPdbFile):
