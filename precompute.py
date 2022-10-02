@@ -20,14 +20,14 @@ from readDataFromSurface import read_data_from_surface
 
 
 def precomputeProteinPlyInfo(masifpniOpts, pdb_id, pChain):
+    ply_file = masifpniOpts['ply_file_template'].format(pdb_id, pChain)
+    if not os.path.exists(ply_file): return
+
     params = masifpniOpts['masifpni_site']
     my_precomp_dir = os.path.join(params['masif_precomputation_dir'], pdb_id)
     resolveDir(my_precomp_dir, chdir=False)
 
-    ply_file = masifpniOpts['ply_file_template'].format(pdb_id, pChain)
-
     input_feat, rho, theta, mask, neigh_indices, iface_labels, verts = read_data_from_surface(ply_file, params)
-
     np.save(os.path.join(my_precomp_dir, pChain + '_rho_wrt_center.npy'), rho)
     np.save(os.path.join(my_precomp_dir, pChain + '_theta_wrt_center.npy'), theta)
     np.save(os.path.join(my_precomp_dir, pChain + '_input_feat.npy'), input_feat)

@@ -146,7 +146,7 @@ class DefaultConfig(object):
         # Default files
         masifpniOpts["default_pdb_file"] = os.path.join("defaultFiles", "default_pdb_file")
         masifpniOpts["pni_pairs_file"] = os.path.join(masifpniOpts["out_base_dir"], "pni_pairs_file.npy")
-        masifpniOpts["setting_log"] = os.path.join(masifpniOpts["out_base_dir"], "setting_log.txt")
+        masifpniOpts["setting_log"] = os.path.join(masifpniOpts["log_dir"], "setting_log.txt")
 
         # Default system params
         masifpniOpts["n_threads"] = 1

@@ -18,11 +18,12 @@ from numpy.matlib import repmat
 from subprocess import Popen, PIPE
 from Bio.PDB import PDBParser, Selection, NeighborSearch
 from Bio.PDB.vectors import *
+from sklearn.neighbors import KDTree
 # from defaultConfig.chemistry import radii, polarHydrogens
 
-from inputOutputProcess import read_msms
+from commonFuncs import removeFile
 from parseConfig import DefaultConfig, GlobalVars
-from sklearn.neighbors import KDTree
+from inputOutputProcess import read_msms
 # from triangulation.xyzrn import output_pdb_as_xyzrn
 # from default_config.global_vars import msms_bin
 # from default_config.masif_opts import masif_opts
@@ -81,10 +82,10 @@ def computeMSMS(pdb_file, masifpniOpts=None, protonate=True):
         areas[fields[3]] = fields[1]
 
     # Remove temporary files.
-    os.remove(file_base + '.area')
-    os.remove(file_base + '.xyzrn')
-    os.remove(file_base + '.vert')
-    os.remove(file_base + '.face')
+    removeFile(myFile=file_base + '.area')
+    removeFile(myFile=file_base + '.xyzrn')
+    removeFile(myFile=file_base + '.vert')
+    removeFile(myFile=file_base + '.face')
     return vertices, faces, normals, names, areas
 
 def output_pdb_as_xyzrn(pdbfilename, xyzrnfilename):
@@ -447,18 +448,20 @@ def computeAPBS(vertices, pdb_file, tmp_file_base):
     stdout, stderr = p2.communicate()
 
     # Read the charge file
-    chargefile = open(tmp_file_base + "_out.csv")
-    charges = numpy.array([0.0] * len(vertices))
-    for ix, line in enumerate(chargefile.readlines()):
-        charges[ix] = float(line.split(",")[3])
+    charges = np.array([])
+    if os.path.exists(tmp_file_base + "_out.csv"):
+        chargefile = open(tmp_file_base + "_out.csv")
+        charges = numpy.array([0.0] * len(vertices))
+        for ix, line in enumerate(chargefile.readlines()):
+            charges[ix] = float(line.split(",")[3])
 
     remove_fn = os.path.join(directory, filename_base)
-    os.remove(remove_fn)
-    os.remove(remove_fn+'.csv')
-    os.remove(remove_fn+'.dx')
-    os.remove(remove_fn+'.in')
-    os.remove(remove_fn+'-input.p')
-    os.remove(remove_fn+'_out.csv')
+    removeFile(myFile=remove_fn)
+    removeFile(myFile=remove_fn+'.csv')
+    removeFile(myFile=remove_fn+'.dx')
+    removeFile(myFile=remove_fn+'.in')
+    removeFile(myFile=remove_fn+'-input.p')
+    removeFile(myFile=remove_fn+'_out.csv')
 
     return charges
 

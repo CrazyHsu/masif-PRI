@@ -355,6 +355,7 @@ def extractProteinTriangulate(masifpniOpts, pdbFile, rawPdbFile):
     if masifpniOpts['use_apbs']:
         vertex_charges = computeAPBS(regular_mesh.vertices, pdbFileBase + ".pdb", pdbFileBase)
 
+    if not vertex_charges or not vertex_hbond or not vertex_hphobicity or not vertex_normal: return
     iface = np.zeros(len(regular_mesh.vertices))
     if 'compute_iface' in masifpniOpts and masifpniOpts['compute_iface']:
         # Compute the surface of the entire complex and from that compute the interface.
@@ -387,8 +388,8 @@ def extractProteinTriangulate(masifpniOpts, pdbFile, rawPdbFile):
     if not os.path.exists(masifpniOpts['pdb_chain_dir']):
         os.makedirs(masifpniOpts['pdb_chain_dir'])
 
-    makeLink(os.path.realpath(pdbFileBase + '.ply'), os.path.join(masifpniOpts['ply_chain_dir'], pdbFileBase + '.ply'))
-    makeLink(os.path.realpath(pdbFileBase + '.pdb'), os.path.join(masifpniOpts['pdb_chain_dir'], pdbFileBase + '.pdb'))
+    makeLink(os.path.realpath(pdbFileBase + '.ply'), os.path.join(masifpniOpts['ply_chain_dir'], os.path.basename(pdbFileBase) + '.ply'))
+    makeLink(os.path.realpath(pdbFileBase + '.pdb'), os.path.join(masifpniOpts['pdb_chain_dir'], os.path.basename(pdbFileBase) + '.pdb'))
     # shutil.copy(pdbFileBase + '.ply', masifpniOpts['ply_chain_dir'])
     # shutil.copy(pdbFileBase + '.pdb', masifpniOpts['pdb_chain_dir'])
 

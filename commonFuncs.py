@@ -142,7 +142,7 @@ def mergeParams(argv):
             # print("Setting {} to {} ".format(key, masifpniOpts[key]), file=logfile)
 
     masifpniOpts["n_threads"] = argv.n_threads
-    resolveDir(masifpniOpts["log_dir"])
+    resolveDirs([masifpniOpts["out_base_dir"], masifpniOpts["log_dir"], masifpniOpts["tmp_dir"]])
     logfile = open(masifpniOpts["setting_log"], "w")
     logfile.write(outSetting)
     logfile.close()
@@ -162,12 +162,33 @@ def resolveDirs(dirList):
         resolveDir(d, chdir=False)
 
 
-def removeFiles(myDir=None, fileList=None):
+def removeFile(myFile=None, fileList=None, myDir=None):
+    if fileList:
+        for f in fileList:
+            if myDir:
+                if os.path.exists(os.path.join(myDir, f.strip("\n"))):
+                    os.remove(os.path.join(myDir, f.strip("\n")))
+            else:
+                if os.path.exists(f):
+                    os.remove(f.strip("\n"))
+    else:
+        if myFile:
+            if myDir:
+                if os.path.exists(os.path.join(myDir, myFile.strip("\n"))):
+                    os.remove(os.path.join(myDir, myFile.strip("\n")))
+            else:
+                if os.path.exists(myFile):
+                    os.remove(myFile)
+
+
+def removeFiles(fileList=None, myDir=None):
     for f in fileList:
         if myDir:
-            os.remove(os.path.join(myDir, f.strip("\n")))
+            if os.path.exists(os.path.join(myDir, f.strip("\n"))):
+                os.remove(os.path.join(myDir, f.strip("\n")))
         else:
-            os.remove(f.strip("\n"))
+            if os.path.exists(f):
+                os.remove(f.strip("\n"))
 
 def removeDirs(myDirs, empty=True):
     for i in myDirs:
