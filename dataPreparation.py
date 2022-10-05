@@ -29,8 +29,9 @@ def dataprepFromList1(pdbIdChains, masifpniOpts):
         if os.path.exists(pdbFile): continue
         targetPdbDownloadBatchRun.append((masifpniOpts, pdb_id, pdbl, True))
 
-    resultList = batchRun(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"])
-    unDownload = list(itertools.chain.from_iterable([i.get() for i in resultList]))
+    downloadDesc = "Download PDBs"
+    resultList = batchRun1(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"], desc=downloadDesc)
+    unDownload = list(itertools.chain.from_iterable(resultList))
     with open(os.path.join(masifpniOpts["log_dir"], "unable_download.txt"), "w") as f:
         for i in unDownload:
             print(i, file=f)
@@ -46,20 +47,13 @@ def dataprepFromList1(pdbIdChains, masifpniOpts):
             fields = i.split("_")
             pid = fields[0]
             pdbId2field[pid] = fields
-            pChains = []
-            naChains = []
-            if len(fields) == 2:
-                pChains = list(map(str, fields[1]))
-            if len(fields) == 3:
-                pChains = list(map(str, fields[1]))
-                naChains = list(map(str, fields[2]))
-            # chainIds = list(itertools.chain.from_iterable([list(map(str, j)) for j in fields[1:]]))
             pdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], pid + ".pdb")
-            # if not os.path.exists(pdbFile): continue
-            for item in itertools.product(pChains, naChains):
-                findProteinChainBoundNABatchRun.append((pdbFile, item[0], item[1]))
-        resultList = batchRun(findProteinChainBoundNA, findProteinChainBoundNABatchRun, n_threads=masifpniOpts["n_threads"])
-        pniChainPairs = list(itertools.chain.from_iterable([i.get() for i in resultList]))
+            if not os.path.exists(pdbFile): continue
+            findProteinChainBoundNABatchRun.append((pdbFile,))
+
+        findProteinChainBoundNADesc = "Find protein-NA bounding chains"
+        resultList = batchRun1(findProteinChainBoundNA, findProteinChainBoundNABatchRun, n_threads=masifpniOpts["n_threads"], desc=findProteinChainBoundNADesc)
+        pniChainPairs = list(itertools.chain.from_iterable(resultList))
         for i in pniChainPairs:
             fields = pdbId2field[i.PDB_id]
             if len(fields) == 1:
@@ -117,12 +111,18 @@ def dataprepFromList1(pdbIdChains, masifpniOpts):
     precomputeProteinPlyInfoBatchRun = [(masifpniOpts,) + i for i in set(precomputeProteinPlyInfoBatchRun)]
     precomputeNaPlyInfoBatchRun = [(masifpniOpts,) + i for i in set(precomputeNaPlyInfoBatchRun)]
 
-    batchRun(extractPDB, extractPchainPDBbatchRun, n_threads=masifpniOpts["n_threads"])
-    batchRun(extractPDB, extractNAchainPDBbatchRun, n_threads=masifpniOpts["n_threads"])
-    batchRun(extractProteinTriangulate, extractProteinTriangulateBatchRun, n_threads=masifpniOpts["n_threads"])
-    batchRun(extractNaTriangulate, extractNaTriangulateBatchRun, n_threads=masifpniOpts["n_threads"])
-    batchRun(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"])
-    batchRun(precomputeNaPlyInfo, precomputeNaPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"])
+    extractPchainPDBDesc = "Extract protein chains"
+    batchRun1(extractPDB, extractPchainPDBbatchRun, n_threads=masifpniOpts["n_threads"], desc=extractPchainPDBDesc)
+    extractNAchainPDBDesc = "Extract nucleic acid chains"
+    batchRun1(extractPDB, extractNAchainPDBbatchRun, n_threads=masifpniOpts["n_threads"], desc=extractNAchainPDBDesc)
+    extractProteinTriangulateDesc = "Extract protein triangulate"
+    batchRun1(extractProteinTriangulate, extractProteinTriangulateBatchRun, n_threads=masifpniOpts["n_threads"], desc=extractProteinTriangulateDesc)
+    extractNaTriangulateDesc = "Extract nucleic acid triangulate"
+    batchRun1(extractNaTriangulate, extractNaTriangulateBatchRun, n_threads=masifpniOpts["n_threads"], desc=extractNaTriangulateDesc)
+    precomputeProteinPlyInfoDesc = "Precompute protein ply information"
+    batchRun1(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"], desc=precomputeProteinPlyInfoDesc)
+    precomputeNaPlyInfoDesc = "Precompute nucleic acid ply information"
+    batchRun1(precomputeNaPlyInfo, precomputeNaPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"], desc=precomputeNaPlyInfoDesc)
 
 
 def dataprepFromList(pdbIdChains, masifpniOpts):

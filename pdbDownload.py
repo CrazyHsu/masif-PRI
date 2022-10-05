@@ -57,9 +57,10 @@ def pdbDownload(argv):
         pdbFile = os.path.join(masifpniOpts['raw_pdb_dir'], pdb_id + ".pdb")
         if os.path.exists(pdbFile): continue
         targetPdbDownloadBatchRun.append((masifpniOpts, pdb_id, pdbl, argv.overwrite))
-    resultList = batchRun(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"])
+    resultList = batchRun1(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"])
 
-    unDownload = list(itertools.chain.from_iterable([i.get() for i in resultList]))
+    # unDownload = list(itertools.chain.from_iterable([i.get() for i in resultList]))
+    unDownload = list(itertools.chain.from_iterable(resultList))
     with open(os.path.join(masifpniOpts["log_dir"], "unable_download.txt"), "w") as f:
         for i in unDownload:
             print(i, file=f)

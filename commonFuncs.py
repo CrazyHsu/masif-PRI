@@ -10,6 +10,7 @@ Last modified: 2022-09-18 21:56:11
 import os, shutil, itertools
 import numpy as np
 
+from tqdm import tqdm
 from collections import namedtuple
 from parseConfig import DefaultConfig, ParseConfig
 
@@ -42,6 +43,34 @@ def batchRun(myFunc, argList, n_threads=1, chunk=False, chunkSize=500):
             resultList.append(res)
         pool.close()
         pool.join()
+    return resultList
+
+def batchRun1(myFunc, argList, n_threads=1, chunk=False, chunkSize=500, desc=""):
+    from multiprocessing import Pool, JoinableQueue
+    resultList = []
+    jobs = []
+    if chunk:
+        for i in range(0, len(argList), chunkSize):
+            chunkList = argList[i:i+chunkSize]
+            pool = Pool(processes=n_threads)
+            for arg in chunkList:
+                if len(arg) == 1:
+                    jobs.append(pool.apply_async(myFunc, (arg[0],)))
+                else:
+                    jobs.append(pool.apply_async(myFunc, arg))
+            pool.close()
+            for job in tqdm(jobs, desc=desc):
+                resultList.append(job.get())
+    else:
+        pool = Pool(processes=n_threads)
+        for arg in argList:
+            if len(arg) == 1:
+                jobs.append(pool.apply_async(myFunc, (arg[0],)))
+            else:
+                jobs.append(pool.apply_async(myFunc, arg))
+        pool.close()
+        for job in tqdm(jobs, desc=desc):
+            resultList.append(job.get())
     return resultList
 
 
