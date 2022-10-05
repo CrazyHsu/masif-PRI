@@ -355,7 +355,7 @@ def extractProteinTriangulate(masifpniOpts, pdbFile, rawPdbFile):
     if masifpniOpts['use_apbs']:
         vertex_charges = computeAPBS(regular_mesh.vertices, pdbFileBase + ".pdb", pdbFileBase)
 
-    if not vertex_charges or not vertex_hbond or not vertex_hphobicity or not vertex_normal: return
+    if not vertex_charges.any() or not vertex_hbond.any() or not vertex_hphobicity.any() or not vertex_normal.any(): return
     iface = np.zeros(len(regular_mesh.vertices))
     if 'compute_iface' in masifpniOpts and masifpniOpts['compute_iface']:
         # Compute the surface of the entire complex and from that compute the interface.

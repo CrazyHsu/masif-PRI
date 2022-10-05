@@ -9,14 +9,120 @@ Last modified: 2022-09-13 00:16:34
 
 import sys, itertools
 import numpy as np
+import pandas as pd
 from Bio.PDB import PDBList
 
 from commonFuncs import *
 from parseConfig import DefaultConfig, GlobalVars
 from pdbDownload import targetPdbDownload
 from precompute import precomputeProteinPlyInfo, precomputeNaPlyInfo
-from inputOutputProcess import extractPniPDB
+from inputOutputProcess import extractPniPDB, extractPDB, findProteinChainBoundNA
 from readDataFromSurface import extractProteinTriangulate, extractNaTriangulate
+
+
+def dataprepFromList1(pdbIdChains, masifpniOpts):
+    pdbIds = [i.split("_")[0] for i in set(pdbIdChains)]
+    pdbl = PDBList(server='http://ftp.wwpdb.org')
+    targetPdbDownloadBatchRun = []
+    for pdb_id in pdbIds:
+        pdbFile = os.path.join(masifpniOpts['raw_pdb_dir'], pdb_id + ".pdb")
+        if os.path.exists(pdbFile): continue
+        targetPdbDownloadBatchRun.append((masifpniOpts, pdb_id, pdbl, True))
+
+    resultList = batchRun(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"])
+    unDownload = list(itertools.chain.from_iterable([i.get() for i in resultList]))
+    with open(os.path.join(masifpniOpts["log_dir"], "unable_download.txt"), "w") as f:
+        for i in unDownload:
+            print(i, file=f)
+
+    removeDirs([masifpniOpts["tmp_dir"]], empty=True)
+
+    resumeFromChainPairs = False
+    selectPniChainPairs = []
+    findProteinChainBoundNABatchRun = []
+    if not resumeFromChainPairs:
+        pdbId2field = {}
+        for i in set(pdbIdChains) - set(unDownload):
+            fields = i.split("_")
+            pid = fields[0]
+            pdbId2field[pid] = fields
+            pChains = []
+            naChains = []
+            if len(fields) == 2:
+                pChains = list(map(str, fields[1]))
+            if len(fields) == 3:
+                pChains = list(map(str, fields[1]))
+                naChains = list(map(str, fields[2]))
+            # chainIds = list(itertools.chain.from_iterable([list(map(str, j)) for j in fields[1:]]))
+            pdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], pid + ".pdb")
+            # if not os.path.exists(pdbFile): continue
+            for item in itertools.product(pChains, naChains):
+                findProteinChainBoundNABatchRun.append((pdbFile, item[0], item[1]))
+        resultList = batchRun(findProteinChainBoundNA, findProteinChainBoundNABatchRun, n_threads=masifpniOpts["n_threads"])
+        pniChainPairs = list(itertools.chain.from_iterable([i.get() for i in resultList]))
+        for i in pniChainPairs:
+            fields = pdbId2field[i.PDB_id]
+            if len(fields) == 1:
+                selectPniChainPairs.append(i)
+            elif len(fields) == 2:
+                if i.pChain in fields[1]:
+                    selectPniChainPairs.append(i)
+            else:
+                if i.pChain in fields[1] and i.naChain in fields[2]:
+                    selectPniChainPairs.append(i)
+        np.save(masifpniOpts["pni_pairs_file"], selectPniChainPairs)
+    else:
+        tmp = np.load(masifpniOpts["pni_pairs_file"])
+        for pair in tmp:
+            selectPniChainPairs.append(BoundTuple(*pair.tolist()))
+
+    GlobalVars().setEnviron()
+
+    selectPniChainPairsDF = pd.DataFrame(selectPniChainPairs, columns=["PDB_id", "pChain", "naChain", "naType"])
+    selectPniChainPairsGP = selectPniChainPairsDF.groupby(["PDB_id", "naChain", "naType"])
+
+    pPdbDir = os.path.join(masifpniOpts["extract_pdb"], "protein")
+    rnaPdbDir = os.path.join(masifpniOpts["extract_pdb"], "RNA")
+    dnaPdbDir = os.path.join(masifpniOpts["extract_pdb"], "DNA")
+    resolveDirs([pPdbDir, rnaPdbDir, dnaPdbDir])
+
+    extractPchainPDBbatchRun = []
+    extractNAchainPDBbatchRun = []
+    extractProteinTriangulateBatchRun = []
+    extractNaTriangulateBatchRun = []
+    precomputeProteinPlyInfoBatchRun = []
+    precomputeNaPlyInfoBatchRun = []
+    for gp in selectPniChainPairsGP.groups:
+        tmpGroup = selectPniChainPairsGP.get_group(gp)
+        pid = tmpGroup.PDB_id.unique()[0]
+        pChains = "".join(tmpGroup.pChain.unique())
+        naChain = tmpGroup.naChain.unique()[0]
+        naType = tmpGroup.naType.unique()[0]
+
+        rawPdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], pid + ".pdb")
+        pPdbFile = os.path.join(masifpniOpts["extract_pdb"], "protein", pid + "_" + "".join(pChains) + ".pdb")
+        naPdbFile = os.path.join(masifpniOpts["extract_pdb"], naType, pid + "_" + naChain + ".pdb")
+
+        extractPchainPDBbatchRun.append((rawPdbFile, pPdbFile, pChains))
+        extractNAchainPDBbatchRun.append((rawPdbFile, naPdbFile, naChain))
+        extractProteinTriangulateBatchRun.append((pPdbFile, rawPdbFile))
+        extractNaTriangulateBatchRun.append((naPdbFile, naType, rawPdbFile))
+        precomputeProteinPlyInfoBatchRun.append((pid, "".join(pChains)))
+        precomputeNaPlyInfoBatchRun.append((pid, naChain))
+
+    extractPchainPDBbatchRun = set(extractPchainPDBbatchRun)
+    extractNAchainPDBbatchRun = set(extractNAchainPDBbatchRun)
+    extractProteinTriangulateBatchRun = [(masifpniOpts,) + i for i in set(extractProteinTriangulateBatchRun)]
+    extractNaTriangulateBatchRun = [(masifpniOpts,) + i for i in set(extractNaTriangulateBatchRun)]
+    precomputeProteinPlyInfoBatchRun = [(masifpniOpts,) + i for i in set(precomputeProteinPlyInfoBatchRun)]
+    precomputeNaPlyInfoBatchRun = [(masifpniOpts,) + i for i in set(precomputeNaPlyInfoBatchRun)]
+
+    batchRun(extractPDB, extractPchainPDBbatchRun, n_threads=masifpniOpts["n_threads"])
+    batchRun(extractPDB, extractNAchainPDBbatchRun, n_threads=masifpniOpts["n_threads"])
+    batchRun(extractProteinTriangulate, extractProteinTriangulateBatchRun, n_threads=masifpniOpts["n_threads"])
+    batchRun(extractNaTriangulate, extractNaTriangulateBatchRun, n_threads=masifpniOpts["n_threads"])
+    batchRun(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"])
+    batchRun(precomputeNaPlyInfo, precomputeNaPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"])
 
 
 def dataprepFromList(pdbIdChains, masifpniOpts):
@@ -42,13 +148,13 @@ def dataprepFromList(pdbIdChains, masifpniOpts):
         extractPniPDBbatchRun = []
         pdbId2field = {}
         for i in set(pdbIdChains) - set(unDownload):
-            in_fields = i.split("_")
-            pdb_id = in_fields[0]
-            chainIds = list(itertools.chain.from_iterable([list(map(str, j)) for j in in_fields[1:]]))
+            fields = i.split("_")
+            pdb_id = fields[0]
+            chainIds = list(itertools.chain.from_iterable([list(map(str, j)) for j in fields[1:]]))
             pdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], pdb_id + ".pdb")
             if not os.path.exists(pdbFile): continue
             extractPniPDBbatchRun.append((pdbFile, masifpniOpts["extract_pdb"], chainIds))
-            pdbId2field[pdb_id] = in_fields
+            pdbId2field[pdb_id] = fields
 
         resultList = batchRun(extractPniPDB, extractPniPDBbatchRun, n_threads=masifpniOpts["n_threads"])
         pniChainPairs = list(itertools.chain.from_iterable([i.get() for i in resultList]))
@@ -117,7 +223,7 @@ def dataprep(argv):
 
     pdbIdChains = set(pdbIdChains)
     if len(pdbIdChains) > 0:
-        dataprepFromList(pdbIdChains, masifpniOpts)
+        dataprepFromList1(pdbIdChains, masifpniOpts)
 
 
 if __name__ == '__main__':

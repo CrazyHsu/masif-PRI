@@ -17,20 +17,31 @@ BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
 BoundTuple.__new__.__defaults__ = ("",) * len(BoundTuple._fields)
 
 # Apply mask to input_feat
-def batchRun(myFunc, argList, n_threads=1):
+def batchRun(myFunc, argList, n_threads=1, chunk=False, chunkSize=500):
     from multiprocessing import Pool, JoinableQueue
     resultList = []
-    # q = JoinableQueue(5)
-    pool = Pool(processes=n_threads)
-    for arg in argList:
-        if len(arg) == 1:
-            res = pool.apply_async(myFunc, (arg[0], ))
-        else:
-            res = pool.apply_async(myFunc, arg)
-        resultList.append(res)
-    pool.close()
-    pool.join()
-    # q.join()
+    if chunk:
+        for i in range(0, len(argList), chunkSize):
+            chunkList = argList[i:i+chunkSize]
+            pool = Pool(processes=n_threads)
+            for arg in chunkList:
+                if len(arg) == 1:
+                    res = pool.apply_async(myFunc, (arg[0],))
+                else:
+                    res = pool.apply_async(myFunc, arg)
+                resultList.append(res)
+            pool.close()
+            pool.join()
+    else:
+        pool = Pool(processes=n_threads)
+        for arg in argList:
+            if len(arg) == 1:
+                res = pool.apply_async(myFunc, (arg[0], ))
+            else:
+                res = pool.apply_async(myFunc, arg)
+            resultList.append(res)
+        pool.close()
+        pool.join()
     return resultList
 
 
