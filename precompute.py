@@ -24,10 +24,14 @@ def precomputeProteinPlyInfo(masifpniOpts, pdb_id, pChain):
     if not os.path.exists(ply_file): return
 
     params = masifpniOpts['masifpni_site']
+
+    try:
+        input_feat, rho, theta, mask, neigh_indices, iface_labels, verts = read_data_from_surface(ply_file, params)
+    except:
+        return
+
     my_precomp_dir = os.path.join(params['masif_precomputation_dir'], pdb_id)
     resolveDir(my_precomp_dir, chdir=False)
-
-    input_feat, rho, theta, mask, neigh_indices, iface_labels, verts = read_data_from_surface(ply_file, params)
     np.save(os.path.join(my_precomp_dir, pChain + '_rho_wrt_center.npy'), rho)
     np.save(os.path.join(my_precomp_dir, pChain + '_theta_wrt_center.npy'), theta)
     np.save(os.path.join(my_precomp_dir, pChain + '_input_feat.npy'), input_feat)

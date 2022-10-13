@@ -20,8 +20,9 @@ from inputOutputProcess import extractPniPDB, extractPDB, findProteinChainBoundN
 from readDataFromSurface import extractProteinTriangulate, extractNaTriangulate
 
 
-def dataprepFromList1(pdbIdChains, masifpniOpts):
-    pdbIds = [i.split("_")[0] for i in set(pdbIdChains)]
+def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=False, resumeFindBound=False,
+                      resumeExtractPDB=False, resumeExtractTriangulate=False, resumePrecomputePly=False, batchRunFlag=True):
+    pdbIds = [i.split("_")[0].upper() for i in set(pdbIdChains)]
     pdbl = PDBList(server='http://ftp.wwpdb.org')
     targetPdbDownloadBatchRun = []
     for pdb_id in pdbIds:
@@ -30,7 +31,8 @@ def dataprepFromList1(pdbIdChains, masifpniOpts):
         targetPdbDownloadBatchRun.append((masifpniOpts, pdb_id, pdbl, True))
 
     downloadDesc = "Download PDBs"
-    resultList = batchRun1(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"], desc=downloadDesc)
+    resultList = batchRun1(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"],
+                           desc=downloadDesc, batchRunFlag=batchRunFlag)
     unDownload = list(itertools.chain.from_iterable(resultList))
     with open(os.path.join(masifpniOpts["log_dir"], "unable_download.txt"), "w") as f:
         for i in unDownload:
@@ -52,7 +54,9 @@ def dataprepFromList1(pdbIdChains, masifpniOpts):
             findProteinChainBoundNABatchRun.append((pdbFile,))
 
         findProteinChainBoundNADesc = "Find protein-NA bounding chains"
-        resultList = batchRun1(findProteinChainBoundNA, findProteinChainBoundNABatchRun, n_threads=masifpniOpts["n_threads"], desc=findProteinChainBoundNADesc)
+        resultList = batchRun1(findProteinChainBoundNA, findProteinChainBoundNABatchRun,
+                               n_threads=masifpniOpts["n_threads"], desc=findProteinChainBoundNADesc,
+                               batchRunFlag=batchRunFlag)
         pniChainPairs = list(itertools.chain.from_iterable(resultList))
         for i in pniChainPairs:
             fields = pdbId2field[i.PDB_id]
@@ -111,18 +115,33 @@ def dataprepFromList1(pdbIdChains, masifpniOpts):
     precomputeProteinPlyInfoBatchRun = [(masifpniOpts,) + i for i in set(precomputeProteinPlyInfoBatchRun)]
     precomputeNaPlyInfoBatchRun = [(masifpniOpts,) + i for i in set(precomputeNaPlyInfoBatchRun)]
 
+    plySize = 5000000
+    precomputeProteinPlyInfoBatchRun = [i for i in precomputeProteinPlyInfoBatchRun if os.path.exists(masifpniOpts['ply_file_template'].format(i[1], i[2]))]
+    precomputeProteinPlyInfoBatchRun1 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) <= plySize]
+    precomputeProteinPlyInfoBatchRun2 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) > plySize]
+
     extractPchainPDBDesc = "Extract protein chains"
-    batchRun1(extractPDB, extractPchainPDBbatchRun, n_threads=masifpniOpts["n_threads"], desc=extractPchainPDBDesc)
+    batchRun1(extractPDB, extractPchainPDBbatchRun, n_threads=masifpniOpts["n_threads"], desc=extractPchainPDBDesc,
+              batchRunFlag=batchRunFlag)
     extractNAchainPDBDesc = "Extract nucleic acid chains"
-    batchRun1(extractPDB, extractNAchainPDBbatchRun, n_threads=masifpniOpts["n_threads"], desc=extractNAchainPDBDesc)
+    batchRun1(extractPDB, extractNAchainPDBbatchRun, n_threads=masifpniOpts["n_threads"], desc=extractNAchainPDBDesc,
+              batchRunFlag=batchRunFlag)
     extractProteinTriangulateDesc = "Extract protein triangulate"
-    batchRun1(extractProteinTriangulate, extractProteinTriangulateBatchRun, n_threads=masifpniOpts["n_threads"], desc=extractProteinTriangulateDesc)
+    batchRun1(extractProteinTriangulate, extractProteinTriangulateBatchRun, n_threads=masifpniOpts["n_threads"],
+              desc=extractProteinTriangulateDesc, batchRunFlag=batchRunFlag)
     extractNaTriangulateDesc = "Extract nucleic acid triangulate"
-    batchRun1(extractNaTriangulate, extractNaTriangulateBatchRun, n_threads=masifpniOpts["n_threads"], desc=extractNaTriangulateDesc)
-    precomputeProteinPlyInfoDesc = "Precompute protein ply information"
-    batchRun1(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"], desc=precomputeProteinPlyInfoDesc)
+    batchRun1(extractNaTriangulate, extractNaTriangulateBatchRun, n_threads=masifpniOpts["n_threads"],
+              desc=extractNaTriangulateDesc, batchRunFlag=batchRunFlag)
+
+    precomputeProteinPlyInfoDesc1 = "Precompute protein ply information for size less than {}".format(plySize)
+    batchRun1(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun1, n_threads=masifpniOpts["n_threads"]+10,
+              desc=precomputeProteinPlyInfoDesc1, batchRunFlag=batchRunFlag)
+    precomputeProteinPlyInfoDesc2 = "Precompute protein ply information for size large than {}".format(plySize)
+    batchRun1(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun2, n_threads=masifpniOpts["n_threads"]//2,
+              desc=precomputeProteinPlyInfoDesc2, batchRunFlag=batchRunFlag)
     precomputeNaPlyInfoDesc = "Precompute nucleic acid ply information"
-    batchRun1(precomputeNaPlyInfo, precomputeNaPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"], desc=precomputeNaPlyInfoDesc)
+    batchRun1(precomputeNaPlyInfo, precomputeNaPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"],
+              desc=precomputeNaPlyInfoDesc, batchRunFlag=batchRunFlag)
 
 
 def dataprepFromList(pdbIdChains, masifpniOpts):
@@ -223,7 +242,7 @@ def dataprep(argv):
 
     pdbIdChains = set(pdbIdChains)
     if len(pdbIdChains) > 0:
-        dataprepFromList1(pdbIdChains, masifpniOpts)
+        dataprepFromList1(pdbIdChains, masifpniOpts, batchRunFlag=argv.nobatchRun)
 
 
 if __name__ == '__main__':

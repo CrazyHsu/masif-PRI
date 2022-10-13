@@ -8,7 +8,7 @@ Last modified: 2022-09-11 20:45:15
 '''
 
 
-import os, sys
+import os, sys, tempfile
 import random
 import pymesh
 import numpy as np
@@ -49,31 +49,41 @@ Pablo Gainza LPDI EPFL 2017-2019
 Calls MSMS and returns the vertices.
 Special atoms are atoms with a reduced radius.
 '''
-def computeMSMS(pdb_file, masifpniOpts=None, protonate=True):
+def computeMSMS(pdb_file, masifpniOpts=None, protonate=True, rawPDB=False):
     globalVars = GlobalVars()
     globalVars.initation()
 
     if not masifpniOpts:
         defaultConfig = DefaultConfig()
         masifpniOpts = defaultConfig.masifpniOpts
-    randnum = random.randint(1, 10000000)
-    file_base = masifpniOpts['tmp_dir']+"/msms_"+str(randnum)
+    # randnum = random.randint(1, 10000000)
+    tempfileBase = os.path.basename(tempfile.mkdtemp())
+    pid = os.path.basename(pdb_file).split(".")[0].split("_")[0]
+    file_base = masifpniOpts['tmp_dir'] + "/msms_" + pid + "_" + str(tempfileBase)
     out_xyzrn = file_base+".xyzrn"
 
     if protonate:
-        output_pdb_as_xyzrn(pdb_file, out_xyzrn)
+        output_pdb_as_xyzrn(pdb_file, out_xyzrn, rawPDB=rawPDB)
     else:
         print("Error - pdb2xyzrn is deprecated.")
         sys.exit(1)
     # Now run MSMS on xyzrn file
     FNULL = open(os.devnull, 'w')
-    args = [globalVars.msms_bin, "-density", "3.0", "-hdensity", "3.0", "-probe", "1.5", "-if", out_xyzrn,
+    args = [globalVars.msms_bin, "-density", "1.0", "-hdensity", "3.0", "-probe_radius", "1.5", "-if", out_xyzrn,
             "-of", file_base, "-af", file_base]
     #print msms_bin+" "+`args`
     p2 = Popen(args, stdout=PIPE, stderr=PIPE)
     stdout, stderr = p2.communicate()
 
-    vertices, faces, normals, names = read_msms(file_base)
+    if not os.path.exists(file_base + ".vert"):
+        removeFile(myFile=file_base + '.xyzrn')
+        return np.array([]), np.array([]), np.array([]), [], {}
+
+    try:
+        vertices, faces, normals, names = read_msms(file_base)
+    except:
+        return np.array([]), np.array([]), np.array([]), [], {}
+
     areas = {}
     ses_file = open(file_base+".area")
     next(ses_file) # ignore header line
@@ -88,7 +98,7 @@ def computeMSMS(pdb_file, masifpniOpts=None, protonate=True):
     removeFile(myFile=file_base + '.face')
     return vertices, faces, normals, names, areas
 
-def output_pdb_as_xyzrn(pdbfilename, xyzrnfilename):
+def output_pdb_as_xyzrn(pdbfilename, xyzrnfilename, rawPDB=False):
     """
     xyzrn.py: Read a pdb file and output it is in xyzrn for use in MSMS
     Pablo Gainza - LPDI STI EPFL 2019
@@ -119,19 +129,31 @@ def output_pdb_as_xyzrn(pdbfilename, xyzrnfilename):
         color = "Green"
         coords = None
         full_id = None
-        if atomtype in radii and resname in polarHydrogens:
-            if atomtype == "O":
-                color = "Red"
-            if atomtype == "N":
-                color = "Blue"
-            if atomtype == "H":
-                if name in polarHydrogens[resname]:
-                    color = "Blue"  # Polar hydrogens
-            coords = "{:.06f} {:.06f} {:.06f}".format(atom.get_coord()[0], atom.get_coord()[1], atom.get_coord()[2])
-            insertion = "x"
-            if residue.get_id()[2] != " ":
-                insertion = residue.get_id()[2]
-            full_id = "{}_{:d}_{}_{}_{}_{}".format(chain, residue.get_id()[1], insertion, resname, name, color)
+        if not rawPDB:
+            if atomtype in radii and resname in polarHydrogens:
+                if atomtype == "O":
+                    color = "Red"
+                if atomtype == "N":
+                    color = "Blue"
+                if atomtype == "H":
+                    if name in polarHydrogens[resname]:
+                        color = "Blue"  # Polar hydrogens
+                coords = "{:.06f} {:.06f} {:.06f}".format(atom.get_coord()[0], atom.get_coord()[1], atom.get_coord()[2])
+                insertion = "x"
+                if residue.get_id()[2] != " ":
+                    insertion = residue.get_id()[2]
+                full_id = "{}_{:d}_{}_{}_{}_{}".format(chain, residue.get_id()[1], insertion, resname, name, color)
+        else:
+            if atomtype in radii:
+                if atomtype == "O":
+                    color = "Red"
+                if atomtype == "N":
+                    color = "Blue"
+                coords = "{:.06f} {:.06f} {:.06f}".format(atom.get_coord()[0], atom.get_coord()[1], atom.get_coord()[2])
+                insertion = "x"
+                if residue.get_id()[2] != " ":
+                    insertion = residue.get_id()[2]
+                full_id = "{}_{:d}_{}_{}_{}_{}".format(chain, residue.get_id()[1], insertion, resname, name, color)
         if coords is not None:
             outfile.write(coords + " " + radii[atomtype] + " 1 " + full_id + "\n")
 
@@ -151,6 +173,8 @@ def fixMesh(mesh, resolution, detail="normal"):
         target_len = diag_len * 1e-2
 
     target_len = resolution
+    target_len_long = target_len
+    target_len_short = target_len / 1.0
     # print("Target resolution: {} mm".format(target_len));
     # PGC 2017: Remove duplicated vertices first
     mesh, _ = pymesh.remove_duplicated_vertices(mesh, 0.001)
@@ -158,23 +182,21 @@ def fixMesh(mesh, resolution, detail="normal"):
     count = 0
     print("Removing degenerated triangles")
     mesh, __ = pymesh.remove_degenerated_triangles(mesh, 100)
-    mesh, __ = pymesh.split_long_edges(mesh, target_len)
+    mesh, __ = pymesh.split_long_edges(mesh, target_len_long)
     num_vertices = mesh.num_vertices
     while True:
         mesh, __ = pymesh.collapse_short_edges(mesh, 1e-6)
-        mesh, __ = pymesh.collapse_short_edges(mesh, target_len, preserve_feature=True)
-        mesh, __ = pymesh.remove_obtuse_triangles(mesh, 150.0, 100)
+        mesh, __ = pymesh.collapse_short_edges(mesh, target_len_short, preserve_feature=True)
+        mesh, __ = pymesh.remove_obtuse_triangles(mesh, 150.0, 10)
         if mesh.num_vertices == num_vertices:
             break
 
         num_vertices = mesh.num_vertices
         # print("#v: {}".format(num_vertices));
         count += 1
-        if count > 10: break
+        if count > 4: break
 
     mesh = pymesh.resolve_self_intersection(mesh)
-    mesh, __ = pymesh.remove_duplicated_faces(mesh)
-    mesh = pymesh.compute_outer_hull(mesh)
     mesh, __ = pymesh.remove_duplicated_faces(mesh)
     mesh, __ = pymesh.remove_obtuse_triangles(mesh, 179.0, 5)
     mesh, __ = pymesh.remove_isolated_vertices(mesh)
@@ -354,7 +376,7 @@ def computeSatisfied_CO_HN(atoms):
                 if atom2.get_id() == "H":
                     res2 = atom2.get_parent()
                     # Ensure they belong to different residues.
-                    if res2.get_id() != res1.get_id():
+                    if res2.get_id() != res1.get_id() and "N" in res2 and "C" in res1:
                         # Compute the angle N-H:O, ideal value is 180 (but in
                         # helices it is typically 160) 180 +-30 = pi
                         angle_N_H_O_dev = computeAngleDeviation(

@@ -238,7 +238,6 @@ class DefaultConfig(object):
     def getRadii(self):
         radii = {}
         radii["N"] = "1.540000"
-        radii["N"] = "1.540000"
         radii["O"] = "1.400000"
         radii["C"] = "1.740000"
         radii["H"] = "1.200000"

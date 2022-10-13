@@ -45,15 +45,27 @@ def batchRun(myFunc, argList, n_threads=1, chunk=False, chunkSize=500):
         pool.join()
     return resultList
 
-def batchRun1(myFunc, argList, n_threads=1, chunk=False, chunkSize=500, desc=""):
-    from multiprocessing import Pool, JoinableQueue
+def batchRun1(myFunc, argList, n_threads=1, chunk=False, chunkSize=500, desc="", batchRunFlag=True):
     resultList = []
-    jobs = []
-    if chunk:
-        for i in range(0, len(argList), chunkSize):
-            chunkList = argList[i:i+chunkSize]
-            pool = Pool(processes=n_threads)
-            for arg in chunkList:
+    if batchRunFlag:
+        from multiprocessing import Pool, JoinableQueue
+        jobs = []
+        if chunk:
+            for i in range(0, len(argList), chunkSize):
+                chunkList = argList[i:i+chunkSize]
+                pool = Pool(processes=n_threads, maxtasksperchild=10)
+                for arg in chunkList:
+                    if len(arg) == 1:
+                        jobs.append(pool.apply_async(myFunc, (arg[0],)))
+                    else:
+                        jobs.append(pool.apply_async(myFunc, arg))
+                pool.close()
+                for job in tqdm(jobs, desc=desc):
+                    resultList.append(job.get())
+                pool.join()
+        else:
+            pool = Pool(processes=n_threads, maxtasksperchild=10)
+            for arg in argList:
                 if len(arg) == 1:
                     jobs.append(pool.apply_async(myFunc, (arg[0],)))
                 else:
@@ -61,16 +73,16 @@ def batchRun1(myFunc, argList, n_threads=1, chunk=False, chunkSize=500, desc="")
             pool.close()
             for job in tqdm(jobs, desc=desc):
                 resultList.append(job.get())
+            pool.join()
     else:
-        pool = Pool(processes=n_threads)
-        for arg in argList:
-            if len(arg) == 1:
-                jobs.append(pool.apply_async(myFunc, (arg[0],)))
-            else:
-                jobs.append(pool.apply_async(myFunc, arg))
-        pool.close()
-        for job in tqdm(jobs, desc=desc):
-            resultList.append(job.get())
+        if chunk:
+            for i in range(0, len(argList), chunkSize):
+                chunkList = argList[i:i + chunkSize]
+                for arg in chunkList:
+                    resultList.append(myFunc(*arg))
+        else:
+            for arg in argList:
+                resultList.append(myFunc(*arg))
     return resultList
 
 

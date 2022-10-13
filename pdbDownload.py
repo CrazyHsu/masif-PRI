@@ -41,14 +41,14 @@ def pdbDownload(argv):
 
     pdbIds = []
     if argv.list:
-        pdbIds = [j.split("_")[0] for j in [i for i in argv.list.split(",")]]
+        pdbIds = [j.split("_")[0].upper() for j in [i for i in argv.list.split(",")]]
     if argv.file:
         with open(argv.file) as f:
             for i in f.readlines():
                 if i.startswith("#"): continue
-                pdbIds.append(i.strip().split("_")[0])
+                pdbIds.append(i.strip().split("_")[0].upper())
     if not pdbIds and not argv.all:
-        pdbIds = ["4un3"]
+        pdbIds = ["4UN3"]
     pdbIds = list(set(pdbIds))
 
     pdbl = PDBList(server='http://ftp.wwpdb.org')
@@ -57,7 +57,9 @@ def pdbDownload(argv):
         pdbFile = os.path.join(masifpniOpts['raw_pdb_dir'], pdb_id + ".pdb")
         if os.path.exists(pdbFile): continue
         targetPdbDownloadBatchRun.append((masifpniOpts, pdb_id, pdbl, argv.overwrite))
-    resultList = batchRun1(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"])
+    downloadDesc = "Download PDBs"
+    resultList = batchRun1(targetPdbDownload, targetPdbDownloadBatchRun, n_threads=masifpniOpts["n_threads"],
+                           desc=downloadDesc, batchRunFlag=argv.nobatchRun)
 
     # unDownload = list(itertools.chain.from_iterable([i.get() for i in resultList]))
     unDownload = list(itertools.chain.from_iterable(resultList))

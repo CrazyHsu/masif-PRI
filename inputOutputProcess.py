@@ -254,7 +254,7 @@ def extractPDB(infilename, outfilename, chainIds=None):
     # Output the selected residues
     pdbio = PDBIO()
     pdbio.set_structure(outputStruct)
-    pdbio.save(outfilename, select=NotDisordered())
+    pdbio.save(outfilename, select=NotDisordered(), preserve_atom_numbering=True)
 
 
 """

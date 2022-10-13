@@ -162,7 +162,7 @@ def train_masifPNI_site1(argv):
 
                     if len(iface_labels) > 8000:
                         continue
-                    if (np.sum(iface_labels) > 0.75 * len(iface_labels) or np.sum(iface_labels) < 30):
+                    if np.sum(iface_labels) > 0.75 * len(iface_labels) or np.sum(iface_labels) < 30:
                         continue
                     count_proteins += 1
 

@@ -317,7 +317,9 @@ def extractProteinTriangulate(masifpniOpts, pdbFile, rawPdbFile):
     pdbFileBase = os.path.splitext(pdbFile)[0]
     # tmpOutFileBase = os.path.join(masifpniOpts["tmp_dir"], pdbFileBase)
 
-    vertices1, faces1, normals1, names1, areas1 = computeMSMS(pdbFile, masifpniOpts=masifpniOpts, protonate=True)
+    vertices1, faces1, normals1, names1, areas1 = computeMSMS(pdbFile, masifpniOpts=masifpniOpts, protonate=True, rawPDB=False)
+    if not vertices1.any() or not faces1.any() or not normals1.any() or not names1 or not areas1:
+        return
 
     # vertex_hbond = np.array([])
     # if masifpniOpts['use_hbond']:
@@ -359,7 +361,9 @@ def extractProteinTriangulate(masifpniOpts, pdbFile, rawPdbFile):
     iface = np.zeros(len(regular_mesh.vertices))
     if 'compute_iface' in masifpniOpts and masifpniOpts['compute_iface']:
         # Compute the surface of the entire complex and from that compute the interface.
-        v3, f3, _, _, _ = computeMSMS(rawPdbFile, masifpniOpts=masifpniOpts, protonate=True)
+        v3, f3, _, _, _ = computeMSMS(rawPdbFile, masifpniOpts=masifpniOpts, protonate=True, rawPDB=True)
+        if not v3.any() or not f3.any():
+            return
         # Regularize the mesh
         mesh = pymesh.form_mesh(v3, f3)
         # I believe It is not necessary to regularize the full mesh. This can speed up things by a lot.
