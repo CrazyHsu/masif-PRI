@@ -75,6 +75,7 @@ def batchRun1(myFunc, argList, n_threads=1, chunk=False, chunkSize=500, desc="",
                 resultList.append(job.get())
             pool.join()
     else:
+        print(desc)
         if chunk:
             for i in range(0, len(argList), chunkSize):
                 chunkList = argList[i:i + chunkSize]

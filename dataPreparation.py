@@ -7,7 +7,7 @@ Created on: 2022-09-13 00:16:34
 Last modified: 2022-09-13 00:16:34
 '''
 
-import sys, itertools
+import sys, itertools, tempfile
 import numpy as np
 import pandas as pd
 from Bio.PDB import PDBList
@@ -38,8 +38,6 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
         for i in unDownload:
             print(i, file=f)
 
-    removeDirs([masifpniOpts["tmp_dir"]], empty=True)
-
     resumeFromChainPairs = False
     selectPniChainPairs = []
     findProteinChainBoundNABatchRun = []
@@ -68,9 +66,15 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
             else:
                 if i.pChain in fields[1] and i.naChain in fields[2]:
                     selectPniChainPairs.append(i)
-        np.save(masifpniOpts["pni_pairs_file"], selectPniChainPairs)
+        tempfileBase = os.path.basename(tempfile.mkdtemp())
+        pniPairFile = os.path.join(masifpniOpts['tmp_dir'], tempfileBase + ".pni_pairs_file")
+        np.save(pniPairFile, selectPniChainPairs)
     else:
-        tmp = np.load(masifpniOpts["pni_pairs_file"])
+        try:
+            tmp = np.load(masifpniOpts["pni_pairs_file"])
+        except:
+            print("Please specify the right pni_pairs_file!")
+            return
         for pair in tmp:
             selectPniChainPairs.append(BoundTuple(*pair.tolist()))
 
@@ -115,11 +119,6 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
     precomputeProteinPlyInfoBatchRun = [(masifpniOpts,) + i for i in set(precomputeProteinPlyInfoBatchRun)]
     precomputeNaPlyInfoBatchRun = [(masifpniOpts,) + i for i in set(precomputeNaPlyInfoBatchRun)]
 
-    plySize = 5000000
-    precomputeProteinPlyInfoBatchRun = [i for i in precomputeProteinPlyInfoBatchRun if os.path.exists(masifpniOpts['ply_file_template'].format(i[1], i[2]))]
-    precomputeProteinPlyInfoBatchRun1 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) <= plySize]
-    precomputeProteinPlyInfoBatchRun2 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) > plySize]
-
     extractPchainPDBDesc = "Extract protein chains"
     batchRun1(extractPDB, extractPchainPDBbatchRun, n_threads=masifpniOpts["n_threads"], desc=extractPchainPDBDesc,
               batchRunFlag=batchRunFlag)
@@ -133,6 +132,11 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
     batchRun1(extractNaTriangulate, extractNaTriangulateBatchRun, n_threads=masifpniOpts["n_threads"],
               desc=extractNaTriangulateDesc, batchRunFlag=batchRunFlag)
 
+    plySize = 5000000
+    precomputeProteinPlyInfoBatchRun = [i for i in precomputeProteinPlyInfoBatchRun if os.path.exists(masifpniOpts['ply_file_template'].format(i[1], i[2]))]
+    precomputeProteinPlyInfoBatchRun1 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) <= plySize]
+    precomputeProteinPlyInfoBatchRun2 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) > plySize]
+
     precomputeProteinPlyInfoDesc1 = "Precompute protein ply information for size less than {}".format(plySize)
     batchRun1(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun1, n_threads=masifpniOpts["n_threads"]+10,
               desc=precomputeProteinPlyInfoDesc1, batchRunFlag=batchRunFlag)
@@ -143,6 +147,7 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
     batchRun1(precomputeNaPlyInfo, precomputeNaPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"],
               desc=precomputeNaPlyInfoDesc, batchRunFlag=batchRunFlag)
 
+    # removeDirs([masifpniOpts["tmp_dir"]], empty=True)
 
 def dataprepFromList(pdbIdChains, masifpniOpts):
     pdbIds = [i.split("_")[0] for i in set(pdbIdChains)]
