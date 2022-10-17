@@ -123,12 +123,11 @@ def getIdChainPairs(masifpniOpts, fromFile=None, fromList=None, fromCustomPDB=No
                     x, y, z = line.strip().split("_")
                     for i in list(itertools.product(list(map(str, y)), list(map(str, z)))):
                         myList.append(BoundTuple(x, i[0], i[1], ""))
+
     if fromList:
         for l in fromList:
-            print(fromList, "####")
             fields = l.strip().split("_")
             pdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], fields[0] + ".pdb")
-            print(len(fields), "$$$$")
             if len(fields) == 1:
                 myList.extend(findProteinChainBoundNA(pdbFile))
             elif len(fields) == 2:

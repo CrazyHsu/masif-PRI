@@ -8,9 +8,9 @@
 #  i=$((i+1))
 #done < $1
 
-cat /dev/null > batch_run.lst
+cat /dev/null > $2
 while read p; do
-  echo "python masifPNI.py masifPNI-site dataprep -l $p --config defaultFiles/test.cfg -overwrite --nobatchRun" >> batch_run.lst
+  echo "python masifPNI.py masifPNI-site dataprep -l $p --config defaultFiles/test.cfg -overwrite --nobatchRun" >> $2
 done < $1
 
 #parallel -j $2 < batch_run.lst

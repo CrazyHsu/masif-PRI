@@ -43,7 +43,8 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
     findProteinChainBoundNABatchRun = []
     if not resumeFromChainPairs:
         pdbId2field = {}
-        for i in set(pdbIdChains) - set(unDownload):
+        pdbIdChains = list(set([i for i in pdbIdChains if i.split("_")[0] not in unDownload]))
+        for i in pdbIdChains:
             fields = i.split("_")
             pid = fields[0]
             pdbId2field[pid] = fields

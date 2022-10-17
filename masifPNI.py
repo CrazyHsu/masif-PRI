@@ -104,8 +104,8 @@ def parseArgsSite(parser, argv):
     parser_train.add_argument('--draw_roc', dest='draw_roc', action="store_true", default=False, help='Whether to draw ROC plot.')
     parser_train.add_argument('-n', '--n_threads', type=int, default=1, help="Threads used to prepare files.")
     parser_train.add_argument('-v', '--version', action='version', version='%(prog)s {version}'.format(version=__version__))
-    from masifPNI_site.masifPNI_site_train import train_masifPNI_site1
-    parser_train.set_defaults(func=train_masifPNI_site1)
+    from masifPNI_site.masifPNI_site_train import train_masifPNI_site
+    parser_train.set_defaults(func=train_masifPNI_site)
 
     parser_prection = subparsers.add_parser("predict", help="Predict the protein-RNA complex")
     parser_prection.add_argument('--config', dest='config', help='Config file contains the parameters to run masifPNI.', type=str)

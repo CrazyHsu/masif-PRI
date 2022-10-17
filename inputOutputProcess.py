@@ -8,6 +8,7 @@ Last modified: 2022-09-11 20:46:54
 '''
 
 import numpy as np
+import pandas as pd
 import pymesh
 import itertools
 
@@ -18,6 +19,7 @@ from scipy import spatial
 from biopandas.pdb import PandasPdb
 from subprocess import Popen, PIPE
 from collections import namedtuple
+from Bio import SeqIO
 from Bio.PDB import StructureBuilder, PDBParser, Selection, PDBIO
 from Bio.PDB.PDBIO import Select
 from Bio.SeqUtils import IUPACData
@@ -117,8 +119,26 @@ def find_modified_amino_acids(path):
     return res_set
 
 
-def filterpdbFiles():
-    pass
+def getPdbChainLength(pdbIds, pdbDir):
+    pdb2chainLenList = []
+    naLetters = ["A", "T", "C", "G", "X", "U"]
+    for pdb_id in pdbIds:
+        pdbFile = os.path.join(pdbDir, pdb_id + ".pdb")
+        if not os.path.exists(pdbFile): continue
+        naChain2len = {}
+        pChain2len = {}
+        for r in SeqIO.parse(pdbFile, "pdb-seqres"):
+            chainId = r.annotations["chain"]
+            sequence = r.seq
+            chainType = "naChain" if set(sequence).issubset(set(naLetters)) else "pChain"
+            if chainType == "naChain":
+                naChain2len.update({chainId: len(sequence)})
+            else:
+                pChain2len.update({chainId: len(sequence)})
+
+        for i, j in itertools.product(pChain2len.keys(), naChain2len.keys()):
+            pdb2chainLenList.append([pdb_id, i, j, pChain2len[i], naChain2len[j]])
+    return pd.DataFrame(pdb2chainLenList, columns=["PDB_id", "pChain", "naChain", "pChainLen", "naChainLen"])
 
 
 def findProteinChainBoundNA(pdbFile, pChainId=None, naChainId=None, radius=5.0):
