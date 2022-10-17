@@ -363,10 +363,9 @@ def train_masifPNI_site_old(argv):
     logfile.close()
 
 
-def filterPDBs(pdb_list, data_dirs, masifpniOpts, batchRunFlag=False):
-    my_df = pd.DataFrame(pdb_list)
-    idToDownload = [r.PDB_id for r in pdb_list if r.PDB_id not in data_dirs]
-    idToDownload.extend([r.PDB_id for r in pdb_list if r.PDB_id not in data_dirs])
+def filterPDBs(pdb_list, data_dirs, masifpniOpts, batchRunFlag=False, filterChainByLen=False):
+    raw_pdbs = [i.split("_")[0] for i in os.listdir(masifpniOpts['raw_pdb_dir'])]
+    idToDownload = [r.PDB_id for r in pdb_list if r.PDB_id not in set(data_dirs + raw_pdbs)]
     idToDownload = list(set(idToDownload))
     if len(idToDownload) > 0:
         dataprepFromList1(idToDownload, masifpniOpts, batchRunFlag=batchRunFlag)
@@ -374,8 +373,8 @@ def filterPDBs(pdb_list, data_dirs, masifpniOpts, batchRunFlag=False):
         processedIds = [i for i in idToDownload if os.path.exists(os.path.join(precompute_dir, i))]
         data_dirs = list(set(data_dirs + processedIds))
 
-    filterByLen = False
-    if filterByLen:
+    my_df = pd.DataFrame(pdb_list)
+    if filterChainByLen:
         pdbIds = list(my_df.PDB_id.unique())
         commonKeys = ["PDB_id", "pChain", "naChain"]
         chainLenDf = getPdbChainLength(pdbIds, masifpniOpts['raw_pdb_dir'])
@@ -450,11 +449,15 @@ def train_masifPNI_site(argv):
     data_dirs = os.listdir(params["masif_precomputation_dir"])
     training_pairs = getIdChainPairs(masifpniOpts, fromFile=params["training_list"])
     training_df = pd.DataFrame(training_pairs)
-    filtered_training_list, data_dirs = filterPDBs(training_pairs, data_dirs, masifpniOpts, batchRunFlag=argv.nobatchRun)
+    filtered_training_list, data_dirs = filterPDBs(training_pairs, data_dirs, masifpniOpts,
+                                                   filterChainByLen=argv.filterChainByLen,
+                                                   batchRunFlag=argv.preprocessNobatchRun)
 
     testing_pairs = getIdChainPairs(masifpniOpts, fromFile=params["testing_list"])
     testing_df = pd.DataFrame(testing_pairs)
-    filtered_testing_list, data_dirs = filterPDBs(testing_pairs, data_dirs, masifpniOpts, batchRunFlag=argv.nobatchRun)
+    filtered_testing_list, data_dirs = filterPDBs(testing_pairs, data_dirs, masifpniOpts,
+                                                  filterChainByLen=argv.filterChainByLen,
+                                                  batchRunFlag=argv.preprocessNobatchRun)
     np.random.shuffle(data_dirs)
     data_dirs = data_dirs
     n_val = len(data_dirs) // 10

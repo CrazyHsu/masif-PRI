@@ -101,6 +101,8 @@ def parseArgsSite(parser, argv):
     parser_train.add_argument('--config', dest='config', help='Config file contains the parameters to run masifPNI.', type=str)
     parser_train.add_argument('--training_list', dest='training_list', type=str, default=False, help='The list of PDB ids used to train nucleic network model.')
     parser_train.add_argument('--testing_list', dest='testing_list', type=str, default=False, help='The list of PDB ids used to test nucleic network model.')
+    parser_train.add_argument('--preprocessNobatchRun', action="store_false", default=True, help="Don't preprocess PDBs in batch mode.")
+    parser_train.add_argument('--filterChainByLen', action="store_true", default=False, help="Filter chains by length.")
     parser_train.add_argument('--draw_roc', dest='draw_roc', action="store_true", default=False, help='Whether to draw ROC plot.')
     parser_train.add_argument('-n', '--n_threads', type=int, default=1, help="Threads used to prepare files.")
     parser_train.add_argument('-v', '--version', action='version', version='%(prog)s {version}'.format(version=__version__))
