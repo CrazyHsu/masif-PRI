@@ -11,15 +11,37 @@ import os, shutil, itertools
 import numpy as np
 
 from tqdm import tqdm
+from threading import BoundedSemaphore
+from multiprocessing import Pool
 from collections import namedtuple
 from parseConfig import DefaultConfig, ParseConfig
 
 BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
 BoundTuple.__new__.__defaults__ = ("",) * len(BoundTuple._fields)
 
+
+class TaskManager(object):
+    def __init__(self, process_num, queue_size):
+        self.pool = Pool(processes=process_num, maxtasksperchild=2)
+        self.workers = BoundedSemaphore(queue_size)
+
+    def new_task(self, function,arguments):
+        """Start a new task, blocks if queue is full."""
+        self.workers.acquire()
+        result = self.pool.apply_async(function, args=arguments, callback=self.task_done)
+        return result
+
+    def task_done(self,*args,**kwargs):
+        """Called once task is done, releases the queue is blocked."""
+        self.workers.release()
+
+    def join(self):
+        self.pool.close()
+        self.pool.join()
+
 # Apply mask to input_feat
 def batchRun(myFunc, argList, n_threads=1, chunk=False, chunkSize=500):
-    from multiprocessing import Pool, JoinableQueue
+    # from multiprocessing import Pool, JoinableQueue
     resultList = []
     if chunk:
         for i in range(0, len(argList), chunkSize):
@@ -48,12 +70,12 @@ def batchRun(myFunc, argList, n_threads=1, chunk=False, chunkSize=500):
 def batchRun1(myFunc, argList, n_threads=1, chunk=False, chunkSize=500, desc="", batchRunFlag=True):
     resultList = []
     if batchRunFlag:
-        from multiprocessing import Pool, JoinableQueue
+        # from multiprocessing import Pool, JoinableQueue
         jobs = []
         if chunk:
             for i in range(0, len(argList), chunkSize):
                 chunkList = argList[i:i+chunkSize]
-                pool = Pool(processes=n_threads, maxtasksperchild=10)
+                pool = Pool(processes=n_threads, maxtasksperchild=2)
                 for arg in chunkList:
                     if len(arg) == 1:
                         jobs.append(pool.apply_async(myFunc, (arg[0],)))
@@ -71,6 +93,47 @@ def batchRun1(myFunc, argList, n_threads=1, chunk=False, chunkSize=500, desc="",
                 else:
                     jobs.append(pool.apply_async(myFunc, arg))
             pool.close()
+            for job in tqdm(jobs, desc=desc):
+                resultList.append(job.get())
+            pool.join()
+    else:
+        print(desc)
+        if chunk:
+            for i in range(0, len(argList), chunkSize):
+                chunkList = argList[i:i + chunkSize]
+                for arg in chunkList:
+                    resultList.append(myFunc(*arg))
+        else:
+            for arg in argList:
+                resultList.append(myFunc(*arg))
+    return resultList
+
+
+def batchRun2(myFunc, argList, n_threads=1, chunk=False, chunkSize=500, desc="", batchRunFlag=True):
+    resultList = []
+    if batchRunFlag:
+        # from multiprocessing import Pool, JoinableQueue
+        queue_size = 10
+        jobs = []
+        if chunk:
+            for i in range(0, len(argList), chunkSize):
+                chunkList = argList[i:i+chunkSize]
+                pool = TaskManager(process_num=n_threads, queue_size=queue_size)
+                for arg in chunkList:
+                    if len(arg) == 1:
+                        jobs.append(pool.new_task(myFunc, (arg[0],)))
+                    else:
+                        jobs.append(pool.new_task(myFunc, arg))
+                for job in tqdm(jobs, desc=desc):
+                    resultList.append(job.get())
+                pool.join()
+        else:
+            pool = TaskManager(process_num=n_threads, queue_size=queue_size)
+            for arg in argList:
+                if len(arg) == 1:
+                    jobs.append(pool.new_task(myFunc, (arg[0],)))
+                else:
+                    jobs.append(pool.new_task(myFunc, arg))
             for job in tqdm(jobs, desc=desc):
                 resultList.append(job.get())
             pool.join()
