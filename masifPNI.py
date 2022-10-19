@@ -109,17 +109,19 @@ def parseArgsSite(parser, argv):
     from masifPNI_site.masifPNI_site_train import train_masifPNI_site
     parser_train.set_defaults(func=train_masifPNI_site)
 
-    parser_prection = subparsers.add_parser("predict", help="Predict the protein-RNA complex")
-    parser_prection.add_argument('--config', dest='config', help='Config file contains the parameters to run masifPNI.', type=str)
-    parser_prection.add_argument('-l', '--list', type=str, default=None, help="Lists of PDB ids, separated by comma")
-    parser_prection.add_argument('-f', '--file', type=str, default=None, help="File contains lists of PDB ids. One per separate line.")
-    parser_prection.add_argument('-custom_pdb', '--custom_pdb', type=str, default=None, help="File contain the path of custom PDB files or the directory contains the target PDB files")
-    parser_prection.add_argument('-n', '--n_threads', type=int, default=1, help="Threads used to prepare files.")
-    parser_prection.add_argument('-v', '--version', action='version', version='%(prog)s {version}'.format(version=__version__))
+    parser_predict = subparsers.add_parser("predict", help="Predict the protein-RNA complex")
+    parser_predict.add_argument('--config', dest='config', help='Config file contains the parameters to run masifPNI.', type=str)
+    parser_predict.add_argument('-l', '--list', type=str, default=None, help="Lists of PDB ids, separated by comma")
+    parser_predict.add_argument('-f', '--file', type=str, default=None, help="File contains lists of PDB ids. One per separate line.")
+    parser_predict.add_argument('-custom_pdb', '--custom_pdb', type=str, default=None, help="File contain the path of custom PDB files or the directory contains the target PDB files")
+    parser_predict.add_argument('--preprocessNobatchRun', action="store_false", default=True, help="Don't preprocess PDBs in batch mode.")
+    parser_predict.add_argument('--filterChainByLen', action="store_true", default=False, help="Filter chains by length.")
+    parser_predict.add_argument('-n', '--n_threads', type=int, default=1, help="Threads used to prepare files.")
+    parser_predict.add_argument('-v', '--version', action='version', version='%(prog)s {version}'.format(version=__version__))
     from masifPNI_site.masifPNI_site_predict import masifPNI_site_predict
-    parser_prection.set_defaults(func=masifPNI_site_predict)
+    parser_predict.set_defaults(func=masifPNI_site_predict)
 
-    opt2parser = {"dataprep": parser_dataprep, "train": parser_train, "predict": parser_prection}
+    opt2parser = {"dataprep": parser_dataprep, "train": parser_train, "predict": parser_predict}
     if len(set(argv) - set(defaultArguments)) == 0:
         if "masifPNI-site" in argv:
             tmp = list(set(argv) & set(["dataprep", "train", "predict"]))

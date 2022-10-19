@@ -428,7 +428,7 @@ def train_masifPNI_site(argv):
         if len(os.listdir(params["model_dir"])) != 0:
             # Load existing network.
             print('Reading pre-trained network')
-            learning_obj.saver.restore(learning_obj.session, params['model_dir'] + 'model')
+            learning_obj.saver.restore(learning_obj.session, os.path.join(params['model_dir'], 'model'))
 
     batch_size = 100
     num_iterations = 100
@@ -495,12 +495,10 @@ def train_masifPNI_site(argv):
 
             if pdb_id in filtered_training_list:
                 tmpList = glob.glob(os.path.join(mydir, "*_iface_labels.npy"))
+                if len(tmpList) == 0: continue
                 pChains = [os.path.basename(i).split("_")[0] for i in tmpList]
                 for chain in pChains:
-                    try:
-                        iface_labels = np.load(os.path.join(mydir, chain + "_iface_labels.npy"))
-                    except:
-                        continue
+                    iface_labels = np.load(os.path.join(mydir, chain + "_iface_labels.npy"))
 
                     if len(iface_labels) > 8000:
                         continue
@@ -606,14 +604,11 @@ def train_masifPNI_site(argv):
                 pChains = [os.path.basename(i).split("_")[0] for i in tmpList]
                 for chain in pChains:
                     logfile.write("Testing on {} {}\n".format(pdb_id, chain))
-                    try:
-                        iface_labels = np.load(os.path.join(mydir, chain + "_iface_labels.npy"))
-                    except:
-                        continue
+                    iface_labels = np.load(os.path.join(mydir, chain + "_iface_labels.npy"))
 
-                    if len(iface_labels) > 20000:
+                    if len(iface_labels) > 8000:
                         continue
-                    if np.sum(iface_labels) > 0.75 * len(iface_labels) or np.sum(iface_labels) < 30:
+                    if np.sum(iface_labels) > 0.75 * len(iface_labels) or np.sum(iface_labels) * 1.0 / len(iface_labels) < 0.05:
                         continue
                     count_proteins += 1
 
