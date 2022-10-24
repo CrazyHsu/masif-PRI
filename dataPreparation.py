@@ -53,6 +53,7 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
             findProteinChainBoundNABatchRun.append((pdbFile,))
 
         findProteinChainBoundNADesc = "Find protein-NA bounding chains"
+        print(findProteinChainBoundNABatchRun)
         resultList = batchRun1(findProteinChainBoundNA, findProteinChainBoundNABatchRun,
                                n_threads=masifpniOpts["n_threads"], desc=findProteinChainBoundNADesc,
                                batchRunFlag=batchRunFlag)
@@ -82,15 +83,18 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
     GlobalVars().setEnviron()
 
     selectPniChainPairsDF = pd.DataFrame(selectPniChainPairs, columns=["PDB_id", "pChain", "naChain", "naType"])
+    print(selectPniChainPairsDF)
     selectPniChainPairsGP = selectPniChainPairsDF.groupby(["PDB_id", "naChain", "naType"])
 
     pPdbDir = os.path.join(masifpniOpts["extract_pdb"], "protein")
     rnaPdbDir = os.path.join(masifpniOpts["extract_pdb"], "RNA")
     dnaPdbDir = os.path.join(masifpniOpts["extract_pdb"], "DNA")
-    resolveDirs([pPdbDir, rnaPdbDir, dnaPdbDir])
+    pnaPdbDir = os.path.join(masifpniOpts["extract_pdb"], "protNaComplex")
+    resolveDirs([pPdbDir, rnaPdbDir, dnaPdbDir, pnaPdbDir])
 
     extractPchainPDBbatchRun = []
     extractNAchainPDBbatchRun = []
+    extractPnaPDBbatchRun = []
     extractProteinTriangulateBatchRun = []
     extractNaTriangulateBatchRun = []
     precomputeProteinPlyInfoBatchRun = []
@@ -101,20 +105,32 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
         pChains = "".join(tmpGroup.pChain.unique())
         naChain = tmpGroup.naChain.unique()[0]
         naType = tmpGroup.naType.unique()[0]
+        if naChain != "A":continue
 
         rawPdbFile = os.path.join(masifpniOpts["raw_pdb_dir"], pid + ".pdb")
-        pPdbFile = os.path.join(masifpniOpts["extract_pdb"], "protein", pid + "_" + "".join(pChains) + ".pdb")
+        pPdbFile = os.path.join(masifpniOpts["extract_pdb"], "protein", pid + "_" + pChains + ".pdb")
         naPdbFile = os.path.join(masifpniOpts["extract_pdb"], naType, pid + "_" + naChain + ".pdb")
+        pnaPdbFile = os.path.join(masifpniOpts["extract_pdb"], "protNaComplex", pid + "_" + pChains + "_" + naChain + ".pdb")
 
         extractPchainPDBbatchRun.append((rawPdbFile, pPdbFile, pChains))
         extractNAchainPDBbatchRun.append((rawPdbFile, naPdbFile, naChain))
+        extractPnaPDBbatchRun.append((rawPdbFile, pnaPdbFile, pChains + naChain))
         extractProteinTriangulateBatchRun.append((pPdbFile, rawPdbFile))
-        extractNaTriangulateBatchRun.append((naPdbFile, naType, rawPdbFile))
+        extractNaTriangulateBatchRun.append((naPdbFile, pnaPdbFile))
         precomputeProteinPlyInfoBatchRun.append((pid, "".join(pChains)))
         precomputeNaPlyInfoBatchRun.append((pid, naChain))
 
+    print(extractPchainPDBbatchRun)
+    print(extractNAchainPDBbatchRun)
+    print(extractPnaPDBbatchRun)
+    print(extractProteinTriangulateBatchRun)
+    print(extractNaTriangulateBatchRun)
+    print(precomputeProteinPlyInfoBatchRun)
+    print(precomputeNaPlyInfoBatchRun)
+
     extractPchainPDBbatchRun = set(extractPchainPDBbatchRun)
     extractNAchainPDBbatchRun = set(extractNAchainPDBbatchRun)
+    extractPnaPDBbatchRun = set(extractPnaPDBbatchRun)
     extractProteinTriangulateBatchRun = [(masifpniOpts,) + i for i in set(extractProteinTriangulateBatchRun)]
     extractNaTriangulateBatchRun = [(masifpniOpts,) + i for i in set(extractNaTriangulateBatchRun)]
     precomputeProteinPlyInfoBatchRun = [(masifpniOpts,) + i for i in set(precomputeProteinPlyInfoBatchRun)]
@@ -126,27 +142,30 @@ def dataprepFromList1(pdbIdChains, masifpniOpts, runAll=False, resumeDownload=Fa
     extractNAchainPDBDesc = "Extract nucleic acid chains"
     batchRun1(extractPDB, extractNAchainPDBbatchRun, n_threads=masifpniOpts["n_threads"], desc=extractNAchainPDBDesc,
               batchRunFlag=batchRunFlag)
-    extractProteinTriangulateDesc = "Extract protein triangulate"
-    batchRun1(extractProteinTriangulate, extractProteinTriangulateBatchRun, n_threads=masifpniOpts["n_threads"],
-              desc=extractProteinTriangulateDesc, batchRunFlag=batchRunFlag)
+    extractPnaChainPDBDesc = "Extract protein and nucleic acid complex chains"
+    batchRun1(extractPDB, extractPnaPDBbatchRun, n_threads=masifpniOpts["n_threads"], desc=extractPnaChainPDBDesc,
+              batchRunFlag=batchRunFlag)
+    # extractProteinTriangulateDesc = "Extract protein triangulate"
+    # batchRun1(extractProteinTriangulate, extractProteinTriangulateBatchRun, n_threads=masifpniOpts["n_threads"],
+    #           desc=extractProteinTriangulateDesc, batchRunFlag=batchRunFlag)
     extractNaTriangulateDesc = "Extract nucleic acid triangulate"
     batchRun1(extractNaTriangulate, extractNaTriangulateBatchRun, n_threads=masifpniOpts["n_threads"],
               desc=extractNaTriangulateDesc, batchRunFlag=batchRunFlag)
 
-    plySize = 5000000
-    precomputeProteinPlyInfoBatchRun = [i for i in precomputeProteinPlyInfoBatchRun if os.path.exists(masifpniOpts['ply_file_template'].format(i[1], i[2]))]
-    precomputeProteinPlyInfoBatchRun1 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) <= plySize]
-    precomputeProteinPlyInfoBatchRun2 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) > plySize]
-
-    precomputeProteinPlyInfoDesc1 = "Precompute protein ply information for size less than {}".format(plySize)
-    batchRun1(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun1, n_threads=masifpniOpts["n_threads"]+10,
-              desc=precomputeProteinPlyInfoDesc1, batchRunFlag=batchRunFlag)
-    precomputeProteinPlyInfoDesc2 = "Precompute protein ply information for size large than {}".format(plySize)
-    batchRun1(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun2, n_threads=masifpniOpts["n_threads"]//2,
-              desc=precomputeProteinPlyInfoDesc2, batchRunFlag=batchRunFlag)
-    precomputeNaPlyInfoDesc = "Precompute nucleic acid ply information"
-    batchRun1(precomputeNaPlyInfo, precomputeNaPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"],
-              desc=precomputeNaPlyInfoDesc, batchRunFlag=batchRunFlag)
+    # plySize = 5000000
+    # precomputeProteinPlyInfoBatchRun = [i for i in precomputeProteinPlyInfoBatchRun if os.path.exists(masifpniOpts['ply_file_template'].format(i[1], i[2]))]
+    # precomputeProteinPlyInfoBatchRun1 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) <= plySize]
+    # precomputeProteinPlyInfoBatchRun2 = [i for i in precomputeProteinPlyInfoBatchRun if os.path.getsize(masifpniOpts['ply_file_template'].format(i[1], i[2])) > plySize]
+    #
+    # precomputeProteinPlyInfoDesc1 = "Precompute protein ply information for size less than {}".format(plySize)
+    # batchRun1(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun1, n_threads=masifpniOpts["n_threads"]+10,
+    #           desc=precomputeProteinPlyInfoDesc1, batchRunFlag=batchRunFlag)
+    # precomputeProteinPlyInfoDesc2 = "Precompute protein ply information for size large than {}".format(plySize)
+    # batchRun1(precomputeProteinPlyInfo, precomputeProteinPlyInfoBatchRun2, n_threads=masifpniOpts["n_threads"]//2,
+    #           desc=precomputeProteinPlyInfoDesc2, batchRunFlag=batchRunFlag)
+    # precomputeNaPlyInfoDesc = "Precompute nucleic acid ply information"
+    # batchRun1(precomputeNaPlyInfo, precomputeNaPlyInfoBatchRun, n_threads=masifpniOpts["n_threads"],
+    #           desc=precomputeNaPlyInfoDesc, batchRunFlag=batchRunFlag)
 
     # removeDirs([masifpniOpts["tmp_dir"]], empty=True)
 
@@ -242,9 +261,9 @@ def dataprep(argv):
         with open(argv.file) as f:
             for line in f.readlines():
                 if line.startswith("#"): continue
-                pdbIdChains.append(line.strip())
+                pdbIdChains.append(line.strip().upper())
     if "list" in vars(argv) and argv.list:
-        pdbIdChains.extend(argv.list.split(","))
+        pdbIdChains.extend([i.upper() for i in argv.list.split(",")])
 
     pdbIdChains = set(pdbIdChains)
     if len(pdbIdChains) > 0:

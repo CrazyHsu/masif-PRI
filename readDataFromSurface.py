@@ -317,7 +317,8 @@ def extractProteinTriangulate(masifpniOpts, pdbFile, rawPdbFile):
     pdbFileBase = os.path.splitext(pdbFile)[0]
     # tmpOutFileBase = os.path.join(masifpniOpts["tmp_dir"], pdbFileBase)
 
-    vertices1, faces1, normals1, names1, areas1 = computeMSMS(pdbFile, masifpniOpts=masifpniOpts, protonate=True, rawPDB=False)
+    vertices1, faces1, normals1, names1, areas1 = computeMSMS(pdbFile, masifpniOpts=masifpniOpts, protonate=True,
+                                                              protPDB=True, naPDB=False)
     if not vertices1.any() or not faces1.any() or not normals1.any() or not names1 or not areas1:
         return
 
@@ -361,7 +362,7 @@ def extractProteinTriangulate(masifpniOpts, pdbFile, rawPdbFile):
     iface = np.zeros(len(regular_mesh.vertices))
     if 'compute_iface' in masifpniOpts and masifpniOpts['compute_iface']:
         # Compute the surface of the entire complex and from that compute the interface.
-        v3, f3, _, _, _ = computeMSMS(rawPdbFile, masifpniOpts=masifpniOpts, protonate=True, rawPDB=True)
+        v3, f3, _, _, _ = computeMSMS(rawPdbFile, masifpniOpts=masifpniOpts, protonate=True, protPDB=False, naPDB=False)
         if not v3.any() or not f3.any():
             return
         # Regularize the mesh
@@ -394,9 +395,82 @@ def extractProteinTriangulate(masifpniOpts, pdbFile, rawPdbFile):
 
     makeLink(os.path.realpath(pdbFileBase + '.ply'), os.path.join(masifpniOpts['ply_chain_dir'], os.path.basename(pdbFileBase) + '.ply'))
     makeLink(os.path.realpath(pdbFileBase + '.pdb'), os.path.join(masifpniOpts['pdb_chain_dir'], os.path.basename(pdbFileBase) + '.pdb'))
-    # shutil.copy(pdbFileBase + '.ply', masifpniOpts['ply_chain_dir'])
-    # shutil.copy(pdbFileBase + '.pdb', masifpniOpts['pdb_chain_dir'])
 
 
-def extractNaTriangulate(masifpniOpts, pdbFile, naType, rawPdbFile):
-    pass
+def extractNaTriangulate(masifpniOpts, naPdbFile, pnaPdbFile):
+    pdbFileBase = os.path.splitext(naPdbFile)[0]
+
+    vertices1, faces1, normals1, names1, areas1 = computeMSMS(naPdbFile, masifpniOpts=masifpniOpts, protonate=True,
+                                                              protPDB=False, naPDB=True)
+    if not vertices1.any() or not faces1.any() or not normals1.any() or not names1 or not areas1:
+        return
+    # vertex_hbond = np.array([])
+    # if masifpniOpts['use_hbond']:
+    #     vertex_hbond = computeCharges(tmpOutFileBase, vertices1, names1)
+
+    # For each surface residue, assign the hydrophobicity of its amino acid.
+    # vertex_hphobicity = np.array([])
+    # if masifpniOpts['use_hphob']:
+    #     vertex_hphobicity = computeHydrophobicity(names1)
+
+    # If protonate = false, recompute MSMS of surface, but without hydrogens (set radius of hydrogens to 0).
+    vertices2 = vertices1
+    faces2 = faces1
+
+    # Fix the mesh.
+    mesh = pymesh.form_mesh(vertices2, faces2)
+    regular_mesh = fixMesh(mesh, masifpniOpts['mesh_res'])
+
+    # Compute the normals
+    print(naPdbFile)
+    vertex_normal = compute_normal(regular_mesh.vertices, regular_mesh.faces)
+    # Assign charges on new vertices based on charges of old vertices (nearest
+    # neighbor)
+
+    vertex_hbond = np.array([])
+    # if masifpniOpts['use_hbond']:
+    #     vertex_hbond = computeCharges(pdbFileBase, vertices1, names1)
+    #     vertex_hbond = assignChargesToNewMesh(regular_mesh.vertices, vertices1, vertex_hbond, masifpniOpts)
+
+    vertex_charges = np.array([])
+    # if masifpniOpts['use_apbs']:
+    #     vertex_charges = computeAPBS(regular_mesh.vertices, pdbFileBase + ".pdb", pdbFileBase)
+
+    # if not vertex_charges.any() or not vertex_normal.any(): return
+    iface = np.zeros(len(regular_mesh.vertices))
+    if 'compute_iface' in masifpniOpts and masifpniOpts['compute_iface']:
+        # Compute the surface of the entire complex and from that compute the interface.
+        v3, f3, _, _, _ = computeMSMS(pnaPdbFile, masifpniOpts=masifpniOpts, protonate=True, protPDB=False, naPDB=False)
+        if not v3.any() or not f3.any():
+            return
+        # Regularize the mesh
+        mesh = pymesh.form_mesh(v3, f3)
+        # I believe It is not necessary to regularize the full mesh. This can speed up things by a lot.
+        full_regular_mesh = mesh
+        # Find the vertices that are in the iface.
+        v3 = full_regular_mesh.vertices
+        # Find the distance between every vertex in regular_mesh.vertices and those in the full complex.
+        kdt = KDTree(v3)
+        d, r = kdt.query(regular_mesh.vertices)
+        d = np.square(d)  # Square d, because this is how it was in the pyflann version.
+        assert (len(d) == len(regular_mesh.vertices))
+        iface_v = np.where(d >= 2.0)[0]
+        iface[iface_v] = 1.0
+        # Convert to ply and save.
+        save_ply(pdbFileBase + ".ply", regular_mesh.vertices, regular_mesh.faces, normals=vertex_normal,
+                 charges=vertex_charges, normalize_charges=True, hbond=vertex_hbond, iface=iface)
+
+    else:
+        # Convert to ply and save.
+        save_ply(pdbFileBase + ".ply", regular_mesh.vertices, regular_mesh.faces, normals=vertex_normal,
+                 charges=vertex_charges, normalize_charges=True, hbond=vertex_hbond)
+
+    if not os.path.exists(masifpniOpts['ply_chain_dir']):
+        os.makedirs(masifpniOpts['ply_chain_dir'])
+    if not os.path.exists(masifpniOpts['pdb_chain_dir']):
+        os.makedirs(masifpniOpts['pdb_chain_dir'])
+
+    makeLink(os.path.realpath(pdbFileBase + '.ply'),
+             os.path.join(masifpniOpts['ply_chain_dir'], os.path.basename(pdbFileBase) + '.ply'))
+    makeLink(os.path.realpath(pdbFileBase + '.pdb'),
+             os.path.join(masifpniOpts['pdb_chain_dir'], os.path.basename(pdbFileBase) + '.pdb'))

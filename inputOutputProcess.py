@@ -214,6 +214,122 @@ def findProteinChainBoundNA(pdbFile, pChainId=None, naChainId=None, radius=5.0):
     return boundGroup
 
 
+def findProteinChainBoundNA1(pdbFile, pChainId=None, naChainId=None, radius=5.0, interactFraq=None):
+    pdbId = os.path.basename(pdbFile).split(".")[0]
+    pdbId = pdbId.split("_")[0]
+
+    ppdb = PandasPdb()
+    pdbStruc = ppdb.read_pdb(pdbFile)
+    atomDf = pdbStruc.df["ATOM"]
+
+    DNAChain = atomDf[atomDf["residue_name"].isin(["DA", "DT", "DC", "DG", "DU"])]["chain_id"].tolist()
+    DNAChain = sorted(set(DNAChain))
+    if not DNAChain:
+        DNAChain = []
+
+    RNAChain = atomDf[atomDf["residue_name"].isin(["A", "T", "C", "G", "U"])]["chain_id"].tolist()
+    RNAChain = sorted(set(RNAChain))
+    if not RNAChain:
+        RNAChain = []
+
+    NAChain = RNAChain + DNAChain
+
+    if pChainId:
+        proteinAtomDf = atomDf[atomDf["chain_id"] == pChainId]
+        atomTree = spatial.cKDTree(proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values)
+    else:
+        atomTree = spatial.cKDTree(atomDf[['x_coord', 'y_coord', 'z_coord']].values)
+
+    boundGroup = []
+    # BoundTuple = namedtuple("BoundTuple", ["PDB_id", "pChain", "naChain", "naType"])
+
+    if naChainId:
+        for chain in [naChainId]:
+            NAxyz = atomDf.loc[atomDf["chain_id"].isin([chain])][['x_coord', 'y_coord', 'z_coord']].values
+            atomsNearNA = atomTree.query_ball_point(NAxyz, radius, p=2., eps=0)
+            nearNAIndex = sorted(set(itertools.chain(*atomsNearNA)))
+
+            if nearNAIndex:
+                if pChainId:
+                    proteinAtomDf = atomDf[atomDf["chain_id"] == pChainId]
+                    proteinxyz = proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values
+                    naTree = spatial.cKDTree(NAxyz)
+                    naNearProtein = naTree.query_ball_point(proteinxyz, radius, p=2., eps=0)
+                    naNearProteinLen = len(sorted(set(itertools.chain(*naNearProtein))))
+                    if interactFraq and naNearProteinLen / float(len(NAxyz)) < interactFraq: continue
+
+                    proteinChainBoundNA = sorted(set(proteinAtomDf.iloc[nearNAIndex]['chain_id'].unique()) - set(NAChain))[0]
+                    naChainType = "RNA" if chain in RNAChain else "DNA"
+                    if proteinChainBoundNA == pChainId:
+                        boundGroup.append(BoundTuple(pdbId, pChainId, chain, naChainType))
+                else:
+                    proteinChainBoundNA = sorted(set(atomDf.iloc[nearNAIndex]['chain_id'].unique()) - set(NAChain))
+                    naChainType = "RNA" if naChainId in RNAChain else "DNA"
+                    if proteinChainBoundNA:
+                        for pChain in proteinChainBoundNA:
+                            proteinAtomDf = atomDf[atomDf["chain_id"] == pChain]
+                            proteinxyz = proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values
+                            naTree = spatial.cKDTree(NAxyz)
+                            naNearProtein = naTree.query_ball_point(proteinxyz, radius, p=2., eps=0)
+                            naNearProteinLen = len(sorted(set(itertools.chain(*naNearProtein))))
+                            if interactFraq and naNearProteinLen / float(len(NAxyz)) < interactFraq: continue
+
+                            boundGroup.append(BoundTuple(pdbId, pChain, chain, naChainType))
+    else:
+        for chain in RNAChain:
+            RNAxyz = atomDf.loc[atomDf["chain_id"].isin([chain])][['x_coord', 'y_coord', 'z_coord']].values
+            if RNAxyz.any():
+                atomsNearRNA = atomTree.query_ball_point(RNAxyz, radius, p=2., eps=0)
+                nearRNAIndex = sorted(set(itertools.chain(*atomsNearRNA)))
+                if nearRNAIndex:
+                    proteinChainBoundRNA = sorted(set(atomDf.iloc[nearRNAIndex]['chain_id'].unique()) - set(NAChain))
+                    if proteinChainBoundRNA:
+                        if pChainId and pChainId in proteinChainBoundRNA:
+                            proteinAtomDf = atomDf[atomDf["chain_id"] == pChainId]
+                            proteinxyz = proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values
+                            rnaTree = spatial.cKDTree(RNAxyz)
+                            rnaNearProtein = rnaTree.query_ball_point(proteinxyz, radius, p=2., eps=0)
+                            rnaNearProteinLen = len(sorted(set(itertools.chain(*rnaNearProtein))))
+                            if interactFraq and rnaNearProteinLen / float(len(RNAxyz)) < interactFraq: continue
+                            boundGroup.append(BoundTuple(pdbId, pChainId, chain, "RNA"))
+                        else:
+                            for pChain in proteinChainBoundRNA:
+                                proteinAtomDf = atomDf[atomDf["chain_id"] == pChain]
+                                proteinxyz = proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values
+                                rnaTree = spatial.cKDTree(RNAxyz)
+                                rnaNearProtein = rnaTree.query_ball_point(proteinxyz, radius, p=2., eps=0)
+                                rnaNearProteinLen = len(sorted(set(itertools.chain(*rnaNearProtein))))
+                                if interactFraq and rnaNearProteinLen / float(len(RNAxyz)) < interactFraq: continue
+                                boundGroup.append(BoundTuple(pdbId, pChain, chain, "RNA"))
+        for chain in DNAChain:
+            DNAxyz = atomDf.loc[atomDf["chain_id"].isin([chain])][['x_coord', 'y_coord', 'z_coord']].values
+            if DNAxyz.any():
+                atomsNearDNA = atomTree.query_ball_point(DNAxyz, radius, p=2., eps=0)
+                nearDNAIndex = sorted(set(itertools.chain(*atomsNearDNA)))
+                if nearDNAIndex:
+                    proteinChainBoundDNA = sorted(set(atomDf.iloc[nearDNAIndex]['chain_id'].unique()) - set(NAChain))
+                    if proteinChainBoundDNA:
+                        if pChainId and pChainId in proteinChainBoundDNA:
+                            proteinAtomDf = atomDf[atomDf["chain_id"] == pChainId]
+                            proteinxyz = proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values
+                            dnaTree = spatial.cKDTree(DNAxyz)
+                            dnaNearProtein = dnaTree.query_ball_point(proteinxyz, radius, p=2., eps=0)
+                            dnaNearProteinLen = len(sorted(set(itertools.chain(*dnaNearProtein))))
+                            if interactFraq and dnaNearProteinLen / float(len(DNAxyz)) < interactFraq: continue
+                            boundGroup.append(BoundTuple(pdbId, pChainId, chain, "DNA"))
+                        else:
+                            for pChain in proteinChainBoundDNA:
+                                proteinAtomDf = atomDf[atomDf["chain_id"] == pChain]
+                                proteinxyz = proteinAtomDf[['x_coord', 'y_coord', 'z_coord']].values
+                                dnaTree = spatial.cKDTree(DNAxyz)
+                                dnaNearProtein = dnaTree.query_ball_point(proteinxyz, radius, p=2., eps=0)
+                                dnaNearProteinLen = len(sorted(set(itertools.chain(*dnaNearProtein))))
+                                if interactFraq and dnaNearProteinLen / float(len(DNAxyz)) < interactFraq: continue
+                                boundGroup.append(BoundTuple(pdbId, pChain, chain, "DNA"))
+
+    return boundGroup
+
+
 def extractPniPDB(pdbFile, outDir, chainIds=None):
     pniChainPairs = findProteinChainBoundNA(pdbFile)
     pdbId = os.path.basename(pdbFile).split(".")[0]

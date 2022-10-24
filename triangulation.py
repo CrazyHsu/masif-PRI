@@ -49,7 +49,7 @@ Pablo Gainza LPDI EPFL 2017-2019
 Calls MSMS and returns the vertices.
 Special atoms are atoms with a reduced radius.
 '''
-def computeMSMS(pdb_file, masifpniOpts=None, protonate=True, rawPDB=False):
+def computeMSMS(pdb_file, masifpniOpts=None, protonate=True, protPDB=False, naPDB=False):
     globalVars = GlobalVars()
     globalVars.initation()
 
@@ -63,14 +63,18 @@ def computeMSMS(pdb_file, masifpniOpts=None, protonate=True, rawPDB=False):
     out_xyzrn = file_base+".xyzrn"
 
     if protonate:
-        output_pdb_as_xyzrn(pdb_file, out_xyzrn, rawPDB=rawPDB)
+        output_pdb_as_xyzrn(pdb_file, out_xyzrn, protPDB=protPDB)
     else:
         print("Error - pdb2xyzrn is deprecated.")
         sys.exit(1)
     # Now run MSMS on xyzrn file
     FNULL = open(os.devnull, 'w')
-    args = [globalVars.msms_bin, "-density", "1.0", "-hdensity", "3.0", "-probe_radius", "1.5", "-if", out_xyzrn,
-            "-of", file_base, "-af", file_base]
+    if naPDB:
+        args = [globalVars.msms_bin, "-density", "3.0", "-hdensity", "3.0", "-probe_radius", "1.5", "-if", out_xyzrn,
+                "-of", file_base, "-af", file_base]
+    else:
+        args = [globalVars.msms_bin, "-density", "1.0", "-hdensity", "3.0", "-probe_radius", "1.5", "-if", out_xyzrn,
+                "-of", file_base, "-af", file_base]
     #print msms_bin+" "+`args`
     p2 = Popen(args, stdout=PIPE, stderr=PIPE)
     stdout, stderr = p2.communicate()
@@ -92,13 +96,13 @@ def computeMSMS(pdb_file, masifpniOpts=None, protonate=True, rawPDB=False):
         areas[fields[3]] = fields[1]
 
     # Remove temporary files.
-    removeFile(myFile=file_base + '.area')
-    removeFile(myFile=file_base + '.xyzrn')
-    removeFile(myFile=file_base + '.vert')
-    removeFile(myFile=file_base + '.face')
+    # removeFile(myFile=file_base + '.area')
+    # removeFile(myFile=file_base + '.xyzrn')
+    # removeFile(myFile=file_base + '.vert')
+    # removeFile(myFile=file_base + '.face')
     return vertices, faces, normals, names, areas
 
-def output_pdb_as_xyzrn(pdbfilename, xyzrnfilename, rawPDB=False):
+def output_pdb_as_xyzrn(pdbfilename, xyzrnfilename, protPDB=False):
     """
     xyzrn.py: Read a pdb file and output it is in xyzrn for use in MSMS
     Pablo Gainza - LPDI STI EPFL 2019
@@ -129,7 +133,7 @@ def output_pdb_as_xyzrn(pdbfilename, xyzrnfilename, rawPDB=False):
         color = "Green"
         coords = None
         full_id = None
-        if not rawPDB:
+        if protPDB:
             if atomtype in radii and resname in polarHydrogens:
                 if atomtype == "O":
                     color = "Red"
@@ -478,12 +482,12 @@ def computeAPBS(vertices, pdb_file, tmp_file_base):
             charges[ix] = float(line.split(",")[3])
 
     remove_fn = os.path.join(directory, filename_base)
-    removeFile(myFile=remove_fn)
-    removeFile(myFile=remove_fn+'.csv')
-    removeFile(myFile=remove_fn+'.dx')
-    removeFile(myFile=remove_fn+'.in')
-    removeFile(myFile=remove_fn+'-input.p')
-    removeFile(myFile=remove_fn+'_out.csv')
+    # removeFile(myFile=remove_fn)
+    # removeFile(myFile=remove_fn+'.csv')
+    # removeFile(myFile=remove_fn+'.dx')
+    # removeFile(myFile=remove_fn+'.in')
+    # removeFile(myFile=remove_fn+'-input.p')
+    # removeFile(myFile=remove_fn+'_out.csv')
 
     return charges
 

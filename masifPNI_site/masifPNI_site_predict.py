@@ -10,10 +10,15 @@ Last modified: 2022-09-12 16:42:58
 import time, os, sys, importlib, glob
 import numpy as np
 import pandas as pd
+import pymesh
 
 from Bio.PDB import PDBList
 from collections import namedtuple
 from multiprocessing import Pool, JoinableQueue
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import matthews_corrcoef
 
 from commonFuncs import *
 from parseConfig import DefaultConfig
@@ -125,15 +130,15 @@ def masifPNI_site_predict(argv):
 
     # eval_df = pd.DataFrame(eval_list)
     uniquePairs = []
-    for pair in eval_list:
-        mydir = os.path.join(params["masif_precomputation_dir"], pair.PDB_id)
+    for pdb_id in eval_list:
+        mydir = os.path.join(params["masif_precomputation_dir"], pdb_id)
         tmpList = glob.glob(os.path.join(mydir, "*_iface_labels.npy"))
         if len(tmpList) == 0: continue
         pChains = [os.path.basename(i).split("_")[0] for i in tmpList]
         for chain in pChains:
-            if (pair.PDB_id, chain) in uniquePairs: continue
-            uniquePairs.append((pair.PDB_id, chain))
-            print("Evaluating chain {} in protein {}".format(chain, pair.PDB_id))
+            if (pdb_id, chain) in uniquePairs: continue
+            uniquePairs.append((pdb_id, chain))
+            print("Evaluating chain {} in protein {}".format(chain, pdb_id))
 
             rho_wrt_center = np.load(os.path.join(mydir, chain + "_rho_wrt_center.npy"))
 
@@ -159,7 +164,36 @@ def masifPNI_site_predict(argv):
             toc = time.time()
             print("Total number of patches for which scores were computed: {}\n".format(len(scores[0])))
             print("GPU time (real time, not actual GPU time): {:.3f}s".format(toc - tic))
-            np.save(os.path.join(params["out_pred_dir"], "pred_" + pair.PDB_id + "_" + chain + ".npy"), scores)
+            np.save(os.path.join(params["out_pred_dir"], "pred_" + pdb_id + "_" + chain + ".npy"), scores)
+
+            ply_file = masifpniOpts["ply_file_template"].format(pdb_id, chain)
+            mymesh = pymesh.load_mesh(ply_file)
+            ground_truth = mymesh.get_attribute('vertex_iface')
+
+            roc_auc = roc_auc_score(ground_truth, scores[0])
+            print("ROC AUC score for protein {} : {:.2f} ".format(pdb_id + '_' + chain, roc_auc))
+
+            pred_acc = np.round(scores[0])
+            tn, fp, fn, tp = confusion_matrix(ground_truth, pred_acc).ravel()
+            sn = tp/(tp + fn)
+            print("SN score for protein {} : {:.2f} ".format(pdb_id + '_' + chain, sn))
+
+            sp = tn/(tn + fp)
+            print("SP score for protein {} : {:.2f} ".format(pdb_id + '_' + chain, sp))
+
+            acc = accuracy_score(ground_truth, pred_acc)
+            print("ACC score for protein {} : {:.2f} ".format(pdb_id + '_' + chain, acc))
+
+            mcc = matthews_corrcoef(ground_truth, pred_acc)
+            print("MCC score for protein {} : {:.2f} ".format(pdb_id + '_' + chain, mcc))
+
+            ppv = tp / (tp + fp)
+            print("Precision score for protein {} : {:.2f} ".format(pdb_id + '_' + chain, ppv))
+
+            # F1 score - harmonic mean of precision and recall [2*tp/(2*tp + fp + fn)]
+            f1 = 2 * ppv * sn / (ppv + sp)
+            print("F1 score for protein {} : {:.2f} ".format(pdb_id + '_' + chain, f1))
+
 
     # if (pid.PDB_id, pid.pChain) in uniquePairs: continue
     #     uniquePairs.append((pid.PDB_id, pid.pChain))
